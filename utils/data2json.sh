@@ -14,6 +14,7 @@ feat="" # feat.scp
 oov="<unk>"
 bpecode=""
 verbose=0
+transtype=wrd
 filetype=""
 preprocess_conf=""
 out="" # If omitted, write in stdout
@@ -49,29 +50,30 @@ trap 'rm -rf ${tmpdir}' EXIT
 mkdir -p ${tmpdir}/input
 if [ -n "${feat}" ]; then
     cat ${feat} > ${tmpdir}/input/feat.scp
-
+    
     # Dump in the "legacy" style JSON format
     if [ -n "${filetype}" ]; then
         awk -v filetype=${filetype} '{print $1 " " filetype}' ${feat} \
-            > ${tmpdir}/input/filetype.scp
+        > ${tmpdir}/input/filetype.scp
     fi
-
+    
     feat_to_shape.sh --cmd "${cmd}" --nj ${nj} \
-        --filetype "${filetype}" \
-        --preprocess-conf "${preprocess_conf}" \
-        --verbose ${verbose} ${feat} ${tmpdir}/input/shape.scp
+    --filetype "${filetype}" \
+    --preprocess-conf "${preprocess_conf}" \
+    --verbose ${verbose} ${feat} ${tmpdir}/input/shape.scp
 fi
+
 
 # 2. Create scp files for outputs
 mkdir -p ${tmpdir}/output
 if [ -n "${bpecode}" ]; then
     paste -d " " <(awk '{print $1}' ${dir}/text) <(cut -f 2- -d" " ${dir}/text \
-        | spm_encode --model=${bpecode} --output_format=piece) \
-        > ${tmpdir}/output/token.scp
-elif [ -n "${nlsyms}" ]; then
-    text2token.py -s 1 -n 1 -l ${nlsyms} ${dir}/text > ${tmpdir}/output/token.scp
+    | spm_encode --model=${bpecode} --output_format=piece) \
+    > ${tmpdir}/output/token.scp
+    elif [ -n "${nlsyms}" ]; then
+    text2token.py -s 1 -n 1 -l ${nlsyms} ${dir}/text --transtype ${transtype} > ${tmpdir}/output/token.scp
 else
-    text2token.py -s 1 -n 1 ${dir}/text > ${tmpdir}/output/token.scp
+    text2token.py -s 1 -n 1 ${dir}/text --transtype ${transtype} > ${tmpdir}/output/token.scp
 fi
 < ${tmpdir}/output/token.scp utils/sym2int.pl --map-oov ${oov} -f 2- ${dic} > ${tmpdir}/output/tokenid.scp
 # +2 comes from CTC blank and EOS
@@ -89,29 +91,25 @@ if [ -n "${lang}" ]; then
 fi
 cat ${dir}/utt2spk  > ${tmpdir}/other/utt2spk.scp
 
-# 4. Merge scp files into a JSON file
-opts=""
-for intype in input output other; do
-    if [ ${intype} != other ]; then
-        opts+="--${intype}-scps "
-    else
-        opts+="--scps "
-    fi
 
-    for x in ${tmpdir}/${intype}/*.scp; do
+# 4. Create JSON files from each scp files
+rm -f ${tmpdir}/*/*.json
+for intype in 'input' 'output' 'other'; do
+    for x in "${tmpdir}/${intype}"/*.scp; do
         k=$(basename ${x} .scp)
-        if [ ${k} = shape ]; then
-            opts+="shape:${x}:shape "
-        else
-            opts+="${k}:${x} "
-        fi
+        < ${x} scp2json.py --key ${k} > ${tmpdir}/${intype}/${k}.json
     done
 done
 
+# 5. Merge JSON files into one and output to stdout
 if [ -n "${out}" ]; then
-    opts+="-O ${out}"
+    out_opt="-O ${out}"
+else
+    out_opt=""
 fi
-
-merge_scp2json.py --verbose ${verbose} ${opts}
+mergejson.py --verbose ${verbose} \
+--input-jsons ${tmpdir}/input/*.json \
+--output-jsons ${tmpdir}/output/*.json \
+--jsons ${tmpdir}/other/*.json ${out_opt}
 
 rm -fr ${tmpdir}

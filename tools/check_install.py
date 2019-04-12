@@ -17,7 +17,7 @@ MANUALLY_INSTALLED_LIBRARIES = [
     ('chainer', ("5.0.0")),
     ('cupy', ("5.0.0")),
     ('chainer_ctc', None),
-    ('warpctc_pytorch', ("0.1.1"))
+    #('warpctc_pytorch', ("0.1.1"))
 ]
 
 logging.basicConfig(
