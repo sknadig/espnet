@@ -197,7 +197,7 @@ fi
 if [ ${stage} -le 4 ]; then
     echo "stage 4: Decoding"
     nj=8
-    
+    batchsize=0
     for rtask in ${recog_set}; do
         (
             decode_dir=decode_${rtask}_beam${beam_size}_e${recog_model}_p${penalty}_len${minlenratio}-${maxlenratio}_ctcw${ctc_weight}
@@ -205,7 +205,7 @@ if [ ${stage} -le 4 ]; then
             
             # split data
             splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
-            
+
             #### use CPU for decoding
             ngpu=0
             
@@ -223,6 +223,7 @@ if [ ${stage} -le 4 ]; then
             --maxlenratio ${maxlenratio} \
             --minlenratio ${minlenratio} \
             --ctc-weight ${ctc_weight} \
+            --batchsize ${batchsize} \
             &
             wait
             

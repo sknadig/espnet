@@ -413,7 +413,7 @@ def train(args):
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
         writer = SummaryWriter(log_dir=args.tensorboard_dir)
-        trainer.extend(TensorboardLogger(writer, model, args.grad_clip, att_reporter))
+        trainer.extend(TensorboardLogger(writer, model, idim, device, converter, data, args.grad_clip, att_reporter))
     # Run the training
     trainer.run()
     check_early_stop(trainer, args.epochs)
