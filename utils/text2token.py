@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # Copyright 2017 Johns Hopkins University (Shinji Watanabe)
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
@@ -27,8 +27,7 @@ def exist_or_not(i, match_pos):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser()
     parser.add_argument('--nchar', '-n', default=1, type=int,
                         help='number of characters to split, i.e., \
                         aabb -> a a b b with -n 1 and aa bb with -n 2')
@@ -40,6 +39,8 @@ def main():
                         help='list of non-linguistic symobles, e.g., <NOISE> etc.')
     parser.add_argument('text', type=str, default=False, nargs='?',
                         help='input text')
+    parser.add_argument('--transtype', '-t', type=str, default="wrd",
+                        help='Transcript type. wrd/phn')
     args = parser.parse_args()
 
     rs = []
@@ -86,13 +87,16 @@ def main():
                     i += 1
             a = chars
 
-        a = [a[j:j + n] for j in range(0, len(a), n)]
+        if("wrd" in args.transtype):
+            a = [a[i:i + n] for i in range(0, len(a), n)]
+        else:
+            a = a.split(" ")
 
         a_flat = []
         for z in a:
             a_flat.append("".join(z))
-
         a_chars = [z.replace(' ', args.space) for z in a_flat]
+        a_chars = [z.replace("sil", args.space) for z in a_chars]
         print(' '.join(a_chars))
         line = f.readline()
 
