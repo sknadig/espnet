@@ -211,6 +211,69 @@ class Decoder(torch.nn.Module):
 
         return self.loss, acc
 
+    def align(self, hs_pad, hlens, ys_pad, strm_idx=0):
+        """Decoder forward
+
+        :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
+        :param torch.Tensor hlens: batch of lengths of hidden state sequences (B)
+        :param torch.Tensor ys_pad: batch of padded character id sequence tensor (B, Lmax)
+        :param int strm_idx: stream index indicates the index of decoding stream.
+        :return: attention loss value
+        :rtype: torch.Tensor
+        :return: accuracy
+        :rtype: float
+        """
+        # TODO(kan-bayashi): need to make more smart way
+        ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
+        # attention index for the attention module
+        # in SPA (speaker parallel attention), att_idx is used to select attention module. In other cases, it is 0.
+        att_idx = min(strm_idx, len(self.att) - 1)
+
+        # hlen should be list of integer
+        hlens = list(map(int, hlens))
+
+        self.loss = None
+        # prepare input and output word sequences with sos/eos IDs
+        eos = ys[0].new([self.eos])
+        sos = ys[0].new([self.sos])
+        ys_in = [torch.cat([sos, y], dim=0) for y in ys]
+        ys_out = [torch.cat([y, eos], dim=0) for y in ys]
+
+        # padding for ys with -1
+        # pys: utt x olen
+        ys_in_pad = pad_list(ys_in, self.eos)
+        ys_out_pad = pad_list(ys_out, self.ignore_id)
+
+        # get dim, length info
+        batch = ys_out_pad.size(0)
+        olength = ys_out_pad.size(1)
+        logging.info(self.__class__.__name__ + ' input lengths:  ' + str(hlens))
+        logging.info(self.__class__.__name__ + ' output lengths: ' + str([y.size(0) for y in ys_out]))
+
+        # initialization
+        c_list = [self.zero_state(hs_pad)]
+        z_list = [self.zero_state(hs_pad)]
+        for _ in six.moves.range(1, self.dlayers):
+            c_list.append(self.zero_state(hs_pad))
+            z_list.append(self.zero_state(hs_pad))
+        att_w = None
+        z_all = []
+        self.att[att_idx].reset()  # reset pre-computation of h
+
+        # pre-computation of embedding
+        eys = self.dropout_emb(self.embed(ys_in_pad))  # utt x olen x zdim
+
+        # loop for an output sequence
+        # loop for an output sequence
+        att_ws = []
+        for i in six.moves.range(olength):
+            att_c, att_w = self.att[att_idx](hs_pad, hlens, self.dropout_dec[0](z_list[0]), att_w)
+            ey = torch.cat((eys[:, i, :], att_c), dim=1)  # utt x (zdim + hdim)
+            z_list, c_list = self.rnn_forward(ey, z_list, c_list, z_list, c_list)
+            z_all.append(self.dropout_dec[-1](z_list[-1]))
+            att_ws.append(att_w)
+        # att_ws = np.array([ele.numpy() for ele in att_ws])
+        return att_ws
     def recognize_beam(self, h, lpz, recog_args, char_list, rnnlm=None, strm_idx=0):
         """beam search implementation
 

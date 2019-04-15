@@ -137,7 +137,7 @@ def main(args):
     parser.add_argument('--sym-blank', default='<blank>', type=str,
                         help='Blank symbol')
     # model (parameter) related
-    parser.add_argument('--dropout-rate', default=0.0, type=float,
+    parser.add_argument('--dropout-rate', default=0.2, type=float,
                         help='Dropout rate for the encoder')
     parser.add_argument('--dropout-rate-decoder', default=0.0, type=float,
                         help='Dropout rate for the decoder')

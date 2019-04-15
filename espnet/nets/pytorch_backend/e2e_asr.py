@@ -292,6 +292,32 @@ class E2E(torch.nn.Module):
         wer = torch.tensor([wer], device=device)
         return self.loss, loss_ctc, loss_att, acc, cer, wer
 
+
+    def align(self, xs_pad, ilens, ys_pad, outdir, att_reporter):
+        """E2E forward
+
+        :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
+        :param torch.Tensor ilens: batch of lengths of input sequences (B)
+        :param torch.Tensor ys_pad: batch of padded character id sequence tensor (B, Lmax)
+        :return: ctc loass value
+        :rtype: torch.Tensor
+        :return: attention loss value
+        :rtype: torch.Tensor
+        :return: accuracy in attention decoder
+        :rtype: float
+        """
+        # 1. encoder
+        hs_pad, hlens, _ = self.enc(xs_pad, ilens)
+        att_ws = self.dec.calculate_all_attentions(hs_pad, hlens, ys_pad)
+        # att_ws = np.array([np.array(ele) for ele in att_ws])
+        print(att_ws.shape)
+        for i,att in enumerate(att_ws):
+            # np.save(outdir+"/align_{0}.npy".format(str(i)), arr)
+            att_reporter._plot_and_save_attention(att, outdir+"/align_{0}.png".format(str(i)))
+            np.save(outdir+"/align_{0}.npy".format(str(i)), att)
+            for j, att_phn in enumerate(att):
+                att_reporter._plot_and_save_attention_single(att_phn, outdir+"/att_ws/"+"/align_{0}_{1}.png".format(str(i), str(j)))
+
     def recognize(self, x, recog_args, char_list, rnnlm=None):
         """E2E beam search
 

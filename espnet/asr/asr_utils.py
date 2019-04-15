@@ -208,8 +208,28 @@ class PlotAttentionReport(extension.Extension):
         plt.tight_layout()
         return plt
 
+    def draw_attention_plot_single(self, att_w):
+        import matplotlib.pyplot as plt
+        if len(att_w.shape) == 3:
+            for h, aw in enumerate(att_w, 1):
+                plt.subplot(1, len(att_w), h)
+                plt.plot(aw)
+                plt.xlabel("Encoder Index")
+                plt.ylabel("Attention probability")
+        else:
+            plt.plot(att_w)
+            plt.xlabel("Encoder Index")
+            plt.ylabel("Attention probability")
+        plt.tight_layout()
+        return plt
+
     def _plot_and_save_attention(self, att_w, filename):
         plt = self.draw_attention_plot(att_w)
+        plt.savefig(filename)
+        plt.close()
+        
+    def _plot_and_save_attention_single(self, att_w, filename):
+        plt = self.draw_attention_plot_single(att_w)
         plt.savefig(filename)
         plt.close()
 

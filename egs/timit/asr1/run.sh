@@ -15,7 +15,7 @@ dumpdir=dump   # directory to dump full features
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
 verbose=1      # verbose option
 resume=        # Resume the training from snapshot
-
+align_json=
 # feature configuration
 do_delta=false
 
@@ -232,5 +232,32 @@ if [ ${stage} -le 4 ]; then
         ) &
     done
     wait
+    echo "Finished"
+fi
+
+if [ ${stage} -le 5 ]; then
+    echo "stage 5: Forced alignment"
+    nj=8
+    batchsize=0
+            
+
+    #### use CPU for decoding
+    ngpu=0
+    mkdir -p ${expdir}/alignments
+    ${decode_cmd} ${expdir}/alignments/align.log \
+    asr_align.py \
+    --ngpu ${ngpu} \
+    --backend ${backend} \
+    --debugmode ${debugmode} \
+    --outdir ${expdir}/alignments/ \
+    --verbose ${verbose} \
+    --align-json ${align_json} \
+    --model ${expdir}/results/${recog_model}  \
+    --beam-size ${beam_size} \
+    --penalty ${penalty} \
+    --maxlenratio ${maxlenratio} \
+    --minlenratio ${minlenratio} \
+    --ctc-weight ${ctc_weight} \
+    --batchsize ${batchsize} 
     echo "Finished"
 fi

@@ -41,7 +41,9 @@ class TensorboardLogger(Extension):
                 if 'cupy' in str(type(k)):
                     k = k.get()
                 self._logger.add_scalar(k, v, trainer.updater.iteration)
+                
         grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+
         self._logger.add_scalar("Gradient clipping", grad_norm, trainer.updater.iteration)
 
         for name, param in self.model.named_parameters():
