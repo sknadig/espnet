@@ -308,7 +308,7 @@ class E2E(torch.nn.Module):
         """
         # 1. encoder
         hs_pad, hlens, _ = self.enc(xs_pad, ilens)
-        att_ws = self.dec.calculate_all_attentions(hs_pad, hlens, ys_pad)
+        att_ws = self.dec.align(hs_pad, hlens, ys_pad)
         # att_ws = np.array([np.array(ele) for ele in att_ws])
         print(att_ws.shape)
         for i,att in enumerate(att_ws):
