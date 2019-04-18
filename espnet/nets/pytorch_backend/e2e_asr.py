@@ -309,8 +309,9 @@ class E2E(torch.nn.Module):
         # 1. encoder
         hs_pad, hlens, _ = self.enc(xs_pad, ilens)
         att_ws = self.dec.align(hs_pad, hlens, ys_pad)
-        # att_ws = np.array([np.array(ele) for ele in att_ws])
+        att_ws = np.array([np.array(ele) for ele in att_ws])
         print(att_ws.shape)
+        # att_reporter._plot_and_save_attention(att_ws, outdir+"/align.png")
         for i,att in enumerate(att_ws):
             # np.save(outdir+"/align_{0}.npy".format(str(i)), arr)
             att_reporter._plot_and_save_attention(att, outdir+"/align_{0}.png".format(str(i)))
