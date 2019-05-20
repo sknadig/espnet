@@ -13,6 +13,7 @@ lang=""
 feat="" # feat.scp
 oov="<unk>"
 bpecode=""
+allow_one_column=false
 verbose=0
 transtype=wrd
 filetype=""
@@ -101,15 +102,17 @@ for intype in 'input' 'output' 'other'; do
     done
 done
 
-# 5. Merge JSON files into one and output to stdout
+if ${allow_one_column}; then
+    opts+="--allow-one-column true "
+else
+    opts+="--allow-one-column false "
+fi
+
 if [ -n "${out}" ]; then
     out_opt="-O ${out}"
 else
     out_opt=""
 fi
-mergejson.py --verbose ${verbose} \
---input-jsons ${tmpdir}/input/*.json \
---output-jsons ${tmpdir}/output/*.json \
---jsons ${tmpdir}/other/*.json ${out_opt}
+merge_scp2json.py --verbose ${verbose} ${opts}
 
 rm -fr ${tmpdir}
