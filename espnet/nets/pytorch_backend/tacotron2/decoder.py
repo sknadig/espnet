@@ -408,7 +408,7 @@ class Decoder(torch.nn.Module):
 
         return outs, probs, att_ws
 
-    def calculate_all_attentions(self, hs, hlens, ys):
+    def calculate_all_attentions(self, hs, hlens, ys, uttids=None):
         """Decoder attention calculation
 
         :param torch.Tensor hs: batch of the sequences of padded hidden states (B, Tmax, idim)

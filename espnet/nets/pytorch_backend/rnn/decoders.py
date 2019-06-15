@@ -24,6 +24,9 @@ from espnet.nets.pytorch_backend.nets_utils import pad_list
 from espnet.nets.pytorch_backend.nets_utils import th_accuracy
 from espnet.nets.pytorch_backend.nets_utils import to_device
 
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+
 MAX_DECODER_OUTPUT = 5
 CTC_SCORING_RATIO = 1.5
 
@@ -105,7 +108,17 @@ class Decoder(torch.nn.Module):
                 z_list[l] = self.decoder[l](self.dropout_dec[l - 1](z_list[l - 1]), z_prev[l])
         return z_list, c_list
 
-    def forward(self, hs_pad, hlens, ys_pad, strm_idx=0):
+    def plot_att(self, e, utt, name="w"):
+        # if(uttids is not None):
+        # plt.imshow(e)
+        plt.imshow(np.array(e), cmap='gray')
+        plt.title(utt , fontsize=10)
+        # plt.subplots_adjust(hspace = 1.0)
+        plt.tight_layout()
+        plt.savefig("/home/neo/MS/espnet/egs/timit/asr1/att_ws/att_oracle_{0}.png".format(name))
+        plt.close()
+        
+    def forward(self, hs_pad, hlens, ys_pad, uttids=None, strm_idx=0):
         """Decoder forward
 
         :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
@@ -117,7 +130,9 @@ class Decoder(torch.nn.Module):
         :return: accuracy
         :rtype: float
         """
+        # logging.info("Decoder uttids: " + str(uttids))
         # TODO(kan-bayashi): need to make more smart way
+        self.uttids = uttids
         ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
         # attention index for the attention module
         # in SPA (speaker parallel attention), att_idx is used to select attention module. In other cases, it is 0.
@@ -156,10 +171,14 @@ class Decoder(torch.nn.Module):
 
         # pre-computation of embedding
         eys = self.dropout_emb(self.embed(ys_in_pad))  # utt x olen x zdim
-
+        atts_w_oracle = []
+        atts_w  = []
         # loop for an output sequence
         for i in six.moves.range(olength):
-            att_c, att_w = self.att[att_idx](hs_pad, hlens, self.dropout_dec[0](z_list[0]), att_w)
+            att_c, att_w, att_w_oracle = self.att[att_idx](hs_pad, hlens, self.dropout_dec[0](z_list[0]), att_w, uttids, i, olength, ys_out_pad)
+            atts_w.append(att_w)
+            atts_w_oracle.append(att_w_oracle)
+            # logging.info("Expected outputs at {idx} are {outs}".format(idx=str(i), outs=" ".join([self.char_list[ele] for ele in ys_out_pad.detach().cpu().numpy()[:,i]])))
             if i > 0 and random.random() < self.sampling_probability:
                 logging.info(' scheduled sampling ')
                 z_out = self.output(z_all[-1])
@@ -170,7 +189,23 @@ class Decoder(torch.nn.Module):
                 ey = torch.cat((eys[:, i, :], att_c), dim=1)  # utt x (zdim + hdim)
             z_list, c_list = self.rnn_forward(ey, z_list, c_list, z_list, c_list)
             z_all.append(self.dropout_dec[-1](z_list[-1]))
+        atts_w_oracle = np.array([ele.detach().cpu().numpy() for ele in atts_w_oracle])
+        atts_w = np.array([ele.detach().cpu().numpy() for ele in atts_w])
 
+        atts_w_oracle = np.swapaxes(atts_w_oracle, 0, 1)
+        atts_w = np.swapaxes(atts_w, 0, 1)
+        
+        # for i in range(len(atts_w)):
+        #     self.plot_att(atts_w[i], uttids[i], "normal_{0}".format(str(i)))
+        #     self.plot_att(atts_w_oracle[i],uttids[i], "oracle_{0}".format(str(i)))
+        # logging.info("Normal att_w shape: " + str(atts_w.shape))
+        # logging.info("ORACLE att_w shape: " + str(atts_w_oracle.shape))
+
+        atts_w_oracle = to_device(self, torch.from_numpy(atts_w_oracle))
+        atts_w = to_device(self, torch.from_numpy(atts_w))
+        
+        # self.plot_att(atts_w[0], "normal")
+        # self.plot_att(atts_w[0], "oracle")
         z_all = torch.stack(z_all, dim=1).view(batch * olength, self.dunits)
         # compute loss
         y_all = self.output(z_all)
@@ -178,9 +213,14 @@ class Decoder(torch.nn.Module):
             reduction_str = 'elementwise_mean'
         else:
             reduction_str = 'mean'
+        # logging.info("y_all shape: " + str(y_all.size()))
+        # logging.info("ys_out_pad shape: " + str(ys_out_pad.view(-1).size()))
         self.loss = F.cross_entropy(y_all, ys_out_pad.view(-1),
                                     ignore_index=self.ignore_id,
                                     reduction=reduction_str)
+        self.oracle_loss = F.binary_cross_entropy(atts_w, atts_w_oracle, reduction=reduction_str)
+        self.oracle_loss *= (np.mean([len(x) for x in ys_in]) - 1) * 100
+        logging.info("oracle loss: " + str(self.oracle_loss))
         # -1: eos, which is removed in the loss computation
         self.loss *= (np.mean([len(x) for x in ys_in]) - 1)
         acc = th_accuracy(y_all, ys_out_pad, ignore_label=self.ignore_id)
@@ -209,7 +249,7 @@ class Decoder(torch.nn.Module):
             loss_reg = - torch.sum((F.log_softmax(y_all, dim=1) * self.vlabeldist).view(-1), dim=0) / len(ys_in)
             self.loss = (1. - self.lsm_weight) * self.loss + self.lsm_weight * loss_reg
 
-        return self.loss, acc
+        return self.loss, self.oracle_loss,  acc
 
     def recognize_beam(self, h, lpz, recog_args, char_list, rnnlm=None, strm_idx=0):
         """beam search implementation
@@ -577,7 +617,7 @@ class Decoder(torch.nn.Module):
 
         return nbest_hyps
 
-    def calculate_all_attentions(self, hs_pad, hlen, ys_pad, strm_idx=0):
+    def calculate_all_attentions(self, hs_pad, hlen, ys_pad,uttids=None, strm_idx=0):
         """Calculate all of attentions
 
         :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
@@ -626,7 +666,7 @@ class Decoder(torch.nn.Module):
 
         # loop for an output sequence
         for i in six.moves.range(olength):
-            att_c, att_w = self.att[att_idx](hs_pad, hlen, self.dropout_dec[0](z_list[0]), att_w)
+            att_c, att_w, att_w_oracle = self.att[att_idx](hs_pad, hlen, self.dropout_dec[0](z_list[0]), att_w)
             ey = torch.cat((eys[:, i, :], att_c), dim=1)  # utt x (zdim + hdim)
             z_list, c_list = self.rnn_forward(ey, z_list, c_list, z_list, c_list)
             att_ws.append(att_w)

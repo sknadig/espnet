@@ -37,7 +37,7 @@ CTC_LOSS_THRESHOLD = 10000
 class Reporter(chainer.Chain):
     """A chainer reporter wrapper"""
 
-    def report(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
+    def report(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss, loss_oracle):
         reporter.report({'loss_ctc': loss_ctc}, self)
         reporter.report({'loss_att': loss_att}, self)
         reporter.report({'acc': acc}, self)
@@ -46,6 +46,7 @@ class Reporter(chainer.Chain):
         reporter.report({'wer': wer}, self)
         logging.info('mtl loss:' + str(mtl_loss))
         reporter.report({'loss': mtl_loss}, self)
+        reporter.report({'loss_oracle': loss_oracle}, self)
 
 
 class E2E(ASRInterface, torch.nn.Module):
@@ -56,7 +57,7 @@ class E2E(ASRInterface, torch.nn.Module):
     :param Namespace args: argument Namespace containing options
     """
 
-    def __init__(self, idim, odim, args):
+    def __init__(self, idim, odim, args, epoch_store = None):
         torch.nn.Module.__init__(self)
         self.mtlalpha = args.mtlalpha
         assert 0.0 <= self.mtlalpha <= 1.0, "mtlalpha should be [0.0, 1.0]"
@@ -67,7 +68,7 @@ class E2E(ASRInterface, torch.nn.Module):
         self.space = args.sym_space
         self.blank = args.sym_blank
         self.reporter = Reporter()
-
+        self.epoch_store = epoch_store
         # below means the last number becomes eos/sos ID
         # note that sos/eos IDs are identical
         self.sos = odim - 1
@@ -111,7 +112,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # ctc
         self.ctc = ctc_for(args, odim)
         # attention
-        self.att = att_for(args)
+        self.att = att_for(args, self.epoch_store)
         # decoder
         self.dec = decoder_for(args, odim, self.sos, self.eos, self.att, labeldist)
 
@@ -184,7 +185,7 @@ class E2E(ASRInterface, torch.nn.Module):
         for l in six.moves.range(len(self.dec.decoder)):
             set_forget_bias_to_one(self.dec.decoder[l].bias_ih)
 
-    def forward(self, xs_pad, ilens, ys_pad):
+    def forward(self, xs_pad, ilens, ys_pad, uttids):
         """E2E forward
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -197,13 +198,14 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: accuracy in attention decoder
         :rtype: float
         """
+        # logging.info("e2e_asr uttids are : " + str(uttids))
         # 0. Frontend
         if self.frontend is not None:
             hs_pad, hlens, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
             hs_pad, hlens = self.feature_transform(hs_pad, hlens)
         else:
             hs_pad, hlens = xs_pad, ilens
-
+        # logging.info("e2e_asr xs_pad shape: " + str(hs_pad.size()))
         # 1. Encoder
         hs_pad, hlens, _ = self.enc(hs_pad, hlens)
 
@@ -217,9 +219,9 @@ class E2E(ASRInterface, torch.nn.Module):
         if self.mtlalpha == 1:
             self.loss_att, acc = None, None
         else:
-            self.loss_att, acc = self.dec(hs_pad, hlens, ys_pad)
+            self.loss_att, self.loss_oracle, acc = self.dec(hs_pad, hlens, ys_pad, uttids)
         self.acc = acc
-
+        # self.loss_oracle *= 100
         # 4. compute cer without beam search
         if self.mtlalpha == 0:
             cer_ctc = None
@@ -291,13 +293,13 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_att_data = None
             loss_ctc_data = float(self.loss_ctc)
         else:
-            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att
+            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle
             loss_att_data = float(self.loss_att)
             loss_ctc_data = float(self.loss_ctc)
-
+            loss_oracle_data = float(self.loss_oracle)
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
-            self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data)
+            self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data, loss_oracle_data)
         else:
             logging.warning('loss (=%f) is not correct', loss_data)
         return self.loss
@@ -411,7 +413,7 @@ class E2E(ASRInterface, torch.nn.Module):
             self.train()
         return enhanced.cpu().numpy(), mask.cpu().numpy(), ilens
 
-    def calculate_all_attentions(self, xs_pad, ilens, ys_pad):
+    def calculate_all_attentions(self, xs_pad, ilens, ys_pad, uttids=None):
         """E2E attention calculation
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)

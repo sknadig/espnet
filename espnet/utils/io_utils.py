@@ -47,7 +47,7 @@ class LoadInputsAndTargets(object):
                  preprocess_args=None
                  ):
         self._loaders = {}
-        if mode not in ['asr', 'tts']:
+        if mode not in ['asr', 'tts', 'oracle']:
             raise ValueError(
                 'Only asr or tts are allowed: mode={}'.format(mode))
         if preprocess_conf is not None:
@@ -160,9 +160,10 @@ class LoadInputsAndTargets(object):
                 return_batch['input1'] = \
                     self.preprocessing(return_batch['input1'], uttid_list,
                                        **self.preprocess_args)
-
+        if(self.preprocess_args['train'] == True):
+            return tuple(return_batch.values()), uttid_list
         # Doesn't return the names now.
-        return tuple(return_batch.values())
+        return tuple(return_batch.values()), uttid_list
 
     def _create_batch_asr(self, x_feats_dict, y_feats_dict, uttid_list):
         """Create a OrderedDict for the mini-batch
