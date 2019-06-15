@@ -48,6 +48,7 @@ from espnet.utils.training.iterators import ToggleableShufflingSerialIterator
 from espnet.utils.training.tensorboard_logger import TensorboardLogger
 from espnet.utils.training.train_utils import check_early_stop
 from espnet.utils.training.train_utils import set_early_stop
+from espnet.utils.training.epoch_store import EpochStore
 
 import matplotlib
 matplotlib.use('Agg')
@@ -182,7 +183,8 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0]
+        # logging.info("BATCH IS: " + str(batch))
+        (xs, ys), uttids = batch[0]
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -211,7 +213,7 @@ class CustomConverter(object):
         ys_pad = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
                            for y in ys], self.ignore_id).to(device)
 
-        return xs_pad, ilens, ys_pad
+        return xs_pad, ilens, ys_pad, uttids
 
 
 def train(args):
@@ -245,9 +247,11 @@ def train(args):
         mtl_mode = 'mtl'
         logging.info('Multitask learning mode')
 
+    epoch_store = EpochStore(epoch=0)
+
     # specify model architecture
     model_class = dynamic_import(args.model_module)
-    model = model_class(idim, odim, args)
+    model = model_class(idim, odim, args, epoch_store = epoch_store)
     assert isinstance(model, ASRInterface)
     subsampling_factor = model.subsample[0]
 
@@ -395,7 +399,7 @@ def train(args):
     # Make a plot for training and validation values
     trainer.extend(extensions.PlotReport(['main/loss', 'validation/main/loss',
                                           'main/loss_ctc', 'validation/main/loss_ctc',
-                                          'main/loss_att', 'validation/main/loss_att'],
+                                          'main/loss_att', 'main/loss_oracle', 'validation/main/loss_att'],
                                          'epoch', file_name='loss.png'))
     trainer.extend(extensions.PlotReport(['main/acc', 'validation/main/acc'],
                                          'epoch', file_name='acc.png'))
@@ -435,7 +439,7 @@ def train(args):
 
     # Write a log of evaluation statistics for each epoch
     trainer.extend(extensions.LogReport(trigger=(REPORT_INTERVAL, 'iteration')))
-    report_keys = ['epoch', 'iteration', 'main/loss', 'main/loss_ctc', 'main/loss_att',
+    report_keys = ['epoch', 'iteration', 'main/loss', 'main/loss_ctc','main/loss_oracle' , 'main/loss_att',
                    'validation/main/loss', 'validation/main/loss_ctc', 'validation/main/loss_att',
                    'main/acc', 'validation/main/acc', 'main/cer_ctc', 'validation/main/cer_ctc',
                    'elapsed_time']
