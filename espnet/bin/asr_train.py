@@ -114,6 +114,8 @@ def main(cmd_args):
                         help='Number of decoder hidden units')
     parser.add_argument('--mtlalpha', default=0.5, type=float,
                         help='Multitask learning coefficient, alpha: alpha*ctc_loss + (1-alpha)*att_loss ')
+    parser.add_argument('--oracle-w', default=0.5, type=float,
+                        help='Multitask learning coefficient, alpha: alpha*ctc_loss + (1-alpha)*att_loss ')
     parser.add_argument('--lsm-type', const='', default='', type=str, nargs='?', choices=['', 'unigram'],
                         help='Apply label smoothing with a specified distribution type')
     parser.add_argument('--lsm-weight', default=0.0, type=float,

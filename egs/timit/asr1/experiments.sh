@@ -1,0 +1,6 @@
+# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "oracle_loss_add_3l" --train_config ./conf/train_oracle_add_3l.yaml --verbose 2
+# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "oracle_loss_dot_3l" --train_config ./conf/train_oracle_dot_3l.yaml --verbose 2
+./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "oracle_loss_loc_3l" --train_config ./conf/train_oracle_loc_3l.yaml --verbose 2
+# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "no_oracle_loss_add_3l" --train_config ./conf/train_no_oracle_add_3l.yaml --verbose 2
+# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "no_oracle_loss_dot_3l" --train_config ./conf/train_no_oracle_dot_3l.yaml --verbose 2
+./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "no_oracle_loss_loc_3l" --train_config ./conf/train_no_oracle_loc_3l.yaml --verbose 2

@@ -9,7 +9,7 @@ subsample: "1_1_1_1_1" # skip every n frame from input to nth layers
 dlayers: 1
 dunits: 300
 # attention related
-atype: dot
+atype: loc
 adim: 320
 aconv-chans: 10
 aconv-filts: 100

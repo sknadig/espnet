@@ -47,7 +47,7 @@ class LoadInputsAndTargets(object):
                  preprocess_args=None
                  ):
         self._loaders = {}
-        if mode not in ['asr', 'tts', 'oracle']:
+        if mode not in ['asr', 'tts', 'recog']:
             raise ValueError(
                 'Only asr or tts are allowed: mode={}'.format(mode))
         if preprocess_conf is not None:
@@ -145,7 +145,9 @@ class LoadInputsAndTargets(object):
         if self.mode == 'asr':
             return_batch, uttid_list = self._create_batch_asr(
                 x_feats_dict, y_feats_dict, uttid_list)
-
+        elif self.mode == 'recog':
+            return_batch, uttid_list = self._create_batch_asr(
+                x_feats_dict, y_feats_dict, uttid_list)
         elif self.mode == 'tts':
             _, info = batch[0]
             eos = int(info['output'][0]['shape'][1]) - 1
@@ -160,9 +162,12 @@ class LoadInputsAndTargets(object):
                 return_batch['input1'] = \
                     self.preprocessing(return_batch['input1'], uttid_list,
                                        **self.preprocess_args)
-        if(self.preprocess_args['train'] == True):
-            return tuple(return_batch.values()), uttid_list
+        # if(self.preprocess_args['train'] == True):
+        #     return tuple(return_batch.values()), uttid_list
         # Doesn't return the names now.
+        if self.mode == 'recog':
+            return tuple(return_batch.values())
+
         return tuple(return_batch.values()), uttid_list
 
     def _create_batch_asr(self, x_feats_dict, y_feats_dict, uttid_list):

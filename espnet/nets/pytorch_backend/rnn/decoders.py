@@ -14,6 +14,8 @@ from espnet.nets.ctc_prefix_score import CTCPrefixScoreTH
 from espnet.nets.e2e_asr_common import end_detect
 
 from espnet.nets.pytorch_backend.rnn.attentions import att_to_numpy
+from espnet.nets.pytorch_backend.rnn.attention_oracle import OracleAtt
+from espnet.nets.pytorch_backend.rnn.shloss import SinkhornDistance
 
 from espnet.nets.pytorch_backend.nets_utils import append_ids
 from espnet.nets.pytorch_backend.nets_utils import get_last_yseq
@@ -52,7 +54,7 @@ class Decoder(torch.nn.Module):
 
     def __init__(self, eprojs, odim, dtype, dlayers, dunits, sos, eos, att, verbose=0,
                  char_list=None, labeldist=None, lsm_weight=0., sampling_probability=0.0,
-                 dropout=0.0):
+                 dropout=0.0, epoch_store=None):
         super(Decoder, self).__init__()
         self.dtype = dtype
         self.dunits = dunits
@@ -90,9 +92,10 @@ class Decoder(torch.nn.Module):
         self.lsm_weight = lsm_weight
         self.sampling_probability = sampling_probability
         self.dropout = dropout
-
+        self.oracle = OracleAtt()
+        self.epoch_store = epoch_store
         self.logzero = -10000000000.0
-
+        self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
     def zero_state(self, hs_pad):
         return hs_pad.new_zeros(hs_pad.size(0), self.dunits)
 
@@ -108,14 +111,16 @@ class Decoder(torch.nn.Module):
                 z_list[l] = self.decoder[l](self.dropout_dec[l - 1](z_list[l - 1]), z_prev[l])
         return z_list, c_list
 
-    def plot_att(self, e, utt, name="w"):
-        # if(uttids is not None):
-        # plt.imshow(e)
-        plt.imshow(np.array(e), cmap='gray')
-        plt.title(utt , fontsize=10)
-        # plt.subplots_adjust(hspace = 1.0)
-        plt.tight_layout()
-        plt.savefig("/home/neo/MS/espnet/egs/timit/asr1/att_ws/att_oracle_{0}.png".format(name))
+    def plot_att(self, atts_w, atts_w_oracle, uttids, name="w"):
+        fig, ax = plt.subplots(2, len(uttids))
+        atts_w_oracle = np.swapaxes(atts_w_oracle, 0, 1)
+        atts_w = np.swapaxes(atts_w, 0, 1)
+        for i in range(len(uttids)):
+            ax[0].imshow(atts_w[i], cmap='gray')
+            ax[1].imshow(atts_w_oracle[i], cmap='gray')
+        
+        fig.tight_layout()
+        plt.savefig("/home/neo/MS/espnet/egs/timit/asr1/att_ws/att_oracle_{0}.png".format(name), bbox_inches='tight', dpi=300)
         plt.close()
         
     def forward(self, hs_pad, hlens, ys_pad, uttids=None, strm_idx=0):
@@ -175,7 +180,16 @@ class Decoder(torch.nn.Module):
         atts_w  = []
         # loop for an output sequence
         for i in six.moves.range(olength):
-            att_c, att_w, att_w_oracle = self.att[att_idx](hs_pad, hlens, self.dropout_dec[0](z_list[0]), att_w, uttids, i, olength, ys_out_pad)
+            att_c, att_w = self.att[att_idx](hs_pad, hlens, self.dropout_dec[0](z_list[0]), att_w)
+            ep = self.epoch_store.get_epoch()
+            att_w_oracle = att_w
+            if(uttids is not None and ep < 1):
+                logging.info("ORACLE UPDATE: epoch {0}, so updating with ORACLE loss".format(str(ep)))
+                att_w_oracle = self.oracle(att_w, uttids, i)
+                att_w_oracle = to_device(self, att_w_oracle)
+                # att_w_oracle = att_w * att_w_oracle
+            else:
+                logging.info("NO ORACLE UPDATE: epoch {0}, not updating with ORACLE loss".format(str(ep)))
             atts_w.append(att_w)
             atts_w_oracle.append(att_w_oracle)
             # logging.info("Expected outputs at {idx} are {outs}".format(idx=str(i), outs=" ".join([self.char_list[ele] for ele in ys_out_pad.detach().cpu().numpy()[:,i]])))
@@ -189,23 +203,29 @@ class Decoder(torch.nn.Module):
                 ey = torch.cat((eys[:, i, :], att_c), dim=1)  # utt x (zdim + hdim)
             z_list, c_list = self.rnn_forward(ey, z_list, c_list, z_list, c_list)
             z_all.append(self.dropout_dec[-1](z_list[-1]))
-        atts_w_oracle = np.array([ele.detach().cpu().numpy() for ele in atts_w_oracle])
-        atts_w = np.array([ele.detach().cpu().numpy() for ele in atts_w])
-
-        atts_w_oracle = np.swapaxes(atts_w_oracle, 0, 1)
-        atts_w = np.swapaxes(atts_w, 0, 1)
+        # atts_w_oracle = np.array([ele.detach().cpu().numpy() for ele in atts_w_oracle])
+        # atts_w = np.array([ele.detach().cpu().numpy() for ele in atts_w])
+        atts_w = torch.stack(atts_w)
+        atts_w_oracle = torch.stack(atts_w_oracle)
+        atts_w_oracle = F.softmax(atts_w_oracle, dim=2)
+        # self.plot_att(atts_w,atts_w_oracle,uttids, "att_w")
+        # atts_w_oracle = np.swapaxes(atts_w_oracle, 0, 1)
+        # atts_w = np.swapaxes(atts_w, 0, 1)
         
         # for i in range(len(atts_w)):
         #     self.plot_att(atts_w[i], uttids[i], "normal_{0}".format(str(i)))
         #     self.plot_att(atts_w_oracle[i],uttids[i], "oracle_{0}".format(str(i)))
-        # logging.info("Normal att_w shape: " + str(atts_w.shape))
-        # logging.info("ORACLE att_w shape: " + str(atts_w_oracle.shape))
-
-        atts_w_oracle = to_device(self, torch.from_numpy(atts_w_oracle))
-        atts_w = to_device(self, torch.from_numpy(atts_w))
+        #     self.plot_att(atts_w[i],atts_w_oracle[i],uttids[i], "att_w_{0}".format(str(i)))
         
+        # logging.info("Normal att_w shape: " + str(atts_w.shape))
+        # logging.info("ORACLE att_w shape: " + str(atts_w_oracle.size()))
+
+        # atts_w_oracle = to_device(self, torch.from_numpy(atts_w_oracle))
+        # atts_w = to_device(self, torch.from_numpy(atts_w))
+        atts_w_oracle = atts_w_oracle.to("cpu")
+        atts_w = atts_w.to("cpu")
         # self.plot_att(atts_w[0], "normal")
-        # self.plot_att(atts_w[0], "oracle")
+        # self.plot_att(atts_w_oracle[0], "oracle")
         z_all = torch.stack(z_all, dim=1).view(batch * olength, self.dunits)
         # compute loss
         y_all = self.output(z_all)
@@ -218,8 +238,14 @@ class Decoder(torch.nn.Module):
         self.loss = F.cross_entropy(y_all, ys_out_pad.view(-1),
                                     ignore_index=self.ignore_id,
                                     reduction=reduction_str)
-        self.oracle_loss = F.binary_cross_entropy(atts_w, atts_w_oracle, reduction=reduction_str)
-        self.oracle_loss *= (np.mean([len(x) for x in ys_in]) - 1) * 100
+        # atts_w.requires_grad = True
+        # atts_w_oracle.requires_grad = False
+        logging.info("atts_w requires grad? : " + str(atts_w.requires_grad) + str(atts_w.is_cuda))
+        logging.info("atts_w_oracle requires grad? : " + str(atts_w_oracle.requires_grad) + str(atts_w_oracle.is_cuda))
+        self.oracle_loss, _, _ = self.sink_horn_loss(atts_w, atts_w_oracle)
+        self.oracle_loss = torch.sum(self.oracle_loss)
+        self.oracle_loss = to_device(self, self.oracle_loss)
+        # self.oracle_loss *= (np.mean([len(x) for x in ys_in]) - 1)
         logging.info("oracle loss: " + str(self.oracle_loss))
         # -1: eos, which is removed in the loss computation
         self.loss *= (np.mean([len(x) for x in ys_in]) - 1)
@@ -666,7 +692,7 @@ class Decoder(torch.nn.Module):
 
         # loop for an output sequence
         for i in six.moves.range(olength):
-            att_c, att_w, att_w_oracle = self.att[att_idx](hs_pad, hlen, self.dropout_dec[0](z_list[0]), att_w)
+            att_c, att_w = self.att[att_idx](hs_pad, hlen, self.dropout_dec[0](z_list[0]), att_w)
             ey = torch.cat((eys[:, i, :], att_c), dim=1)  # utt x (zdim + hdim)
             z_list, c_list = self.rnn_forward(ey, z_list, c_list, z_list, c_list)
             att_ws.append(att_w)
@@ -676,7 +702,7 @@ class Decoder(torch.nn.Module):
         return att_ws
 
 
-def decoder_for(args, odim, sos, eos, att, labeldist):
+def decoder_for(args, odim, sos, eos, att, labeldist, epoch_store=None):
     return Decoder(args.eprojs, odim, args.dtype, args.dlayers, args.dunits, sos, eos, att, args.verbose,
                    args.char_list, labeldist,
-                   args.lsm_weight, args.sampling_probability, args.dropout_rate_decoder)
+                   args.lsm_weight, args.sampling_probability, args.dropout_rate_decoder, epoch_store)

@@ -46,7 +46,7 @@ set -o pipefail
 
 train_set=train_nodev
 train_dev=train_dev
-recog_set="train_dev test"
+recog_set="test"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     local/timit_data_prep.sh ${timit} ${trans_type} || exit 1
@@ -144,7 +144,7 @@ fi
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Decoding"
-    nj=8
+    nj=16
     for rtask in ${recog_set}; do
         (
             decode_dir=decode_${rtask}_$(basename ${decode_config%.*})
@@ -165,8 +165,8 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
             --verbose ${verbose} \
             --recog-json ${feat_recog_dir}/split${nj}utt/data.JOB.json \
             --result-label ${expdir}/${decode_dir}/data.JOB.json \
-            --model ${expdir}/results/${recog_model}
-
+            --model ${expdir}/results/${recog_model} \
+            --batchsize 0
             score_sclite.sh ${expdir}/${decode_dir} ${dict}
 
         ) &
