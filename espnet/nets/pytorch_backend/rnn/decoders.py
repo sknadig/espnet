@@ -23,6 +23,7 @@ from espnet.nets.pytorch_backend.nets_utils import mask_by_length
 from espnet.nets.pytorch_backend.nets_utils import pad_list
 from espnet.nets.pytorch_backend.nets_utils import th_accuracy
 from espnet.nets.pytorch_backend.nets_utils import to_device
+from sklearn.preprocessing import OneHotEncoder
 
 MAX_DECODER_OUTPUT = 5
 CTC_SCORING_RATIO = 1.5
@@ -87,7 +88,7 @@ class Decoder(torch.nn.Module):
         self.lsm_weight = lsm_weight
         self.sampling_probability = sampling_probability
         self.dropout = dropout
-
+        self.onehot_encoder = OneHotEncoder(handle_unknown='ignore', n_values=41, sparse=False)
         self.logzero = -10000000000.0
 
     def zero_state(self, hs_pad):
@@ -178,6 +179,8 @@ class Decoder(torch.nn.Module):
             reduction_str = 'elementwise_mean'
         else:
             reduction_str = 'mean'
+        ys_out_pad_one_hot = self.onehot_encoder.fit_transform(ys_out_pad.cpu().numpy().reshape(-1,1))
+        logging.info("ys_out_pad_one_hot shape : " + str(ys_out_pad_one_hot.shape))
         self.loss = F.cross_entropy(y_all, ys_out_pad.view(-1),
                                     ignore_index=self.ignore_id,
                                     reduction=reduction_str)
