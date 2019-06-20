@@ -461,6 +461,8 @@ def train(args):
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
         writer = SummaryWriter(args.tensorboard_dir)
         trainer.extend(TensorboardLogger(writer, att_reporter))
+
+    trainer.extend(epoch_store, trigger = (1, 'epoch'))
     # Run the training
     trainer.run()
     check_early_stop(trainer, args.epochs)
@@ -531,7 +533,7 @@ def recog(args):
     new_js = {}
 
     load_inputs_and_targets = LoadInputsAndTargets(
-        mode='asr', load_output=False, sort_in_input_length=False,
+        mode='recog', load_output=False, sort_in_input_length=False,
         preprocess_conf=train_args.preprocess_conf
         if args.preprocess_conf is None else args.preprocess_conf,
         preprocess_args={'train': False})

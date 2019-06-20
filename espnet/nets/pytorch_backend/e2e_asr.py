@@ -73,7 +73,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # note that sos/eos IDs are identical
         self.sos = odim - 1
         self.eos = odim - 1
-
+        self.oracle_w = args.oracle_w
         # subsample info
         # +1 means input (+1) and layers outputs (args.elayer)
         subsample = np.ones(args.elayers + 1, dtype=np.int)
@@ -112,9 +112,9 @@ class E2E(ASRInterface, torch.nn.Module):
         # ctc
         self.ctc = ctc_for(args, odim)
         # attention
-        self.att = att_for(args, self.epoch_store)
+        self.att = att_for(args)
         # decoder
-        self.dec = decoder_for(args, odim, self.sos, self.eos, self.att, labeldist)
+        self.dec = decoder_for(args, odim, self.sos, self.eos, self.att, labeldist, epoch_store = self.epoch_store)
 
         # weight initialization
         self.init_like_chainer()
@@ -293,7 +293,7 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_att_data = None
             loss_ctc_data = float(self.loss_ctc)
         else:
-            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle
+            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
             loss_att_data = float(self.loss_att)
             loss_ctc_data = float(self.loss_ctc)
             loss_oracle_data = float(self.loss_oracle)

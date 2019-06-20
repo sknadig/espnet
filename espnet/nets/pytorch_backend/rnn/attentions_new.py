@@ -6,7 +6,35 @@ import torch.nn.functional as F
 
 from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import to_device
+import logging
+import pickle
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
+class OracleAtt(torch.nn.Module):
+    def __init__(self):
+        super(OracleAtt, self).__init__()
+        self.frame_dict = pickle.load(open("/home/neo/MS/espnet/egs/timit/asr1/frame_level_dict.pkl", "rb"))
+    def __call__(self, e, uttids, output_index):
+        # logging.info("Normal e size: " + str(e.size()))
+        # e_oracle = torch.ones(e.size()) * -float('inf')
+        e_oracle = torch.zeros(e.size())
+        # for i in range(len(e_oracle)):
+        #     e_oracle[i] = float(min(e[i]))
+        for i, utt in enumerate(uttids):
+            att_frames = self.frame_dict[utt]
+            # logging.info("ORACLE for {utt} is {frames}".format(utt=utt, frames=att_frames))
+            if(output_index < len(att_frames)):
+                curr_att_frames = att_frames[output_index]
+                # e_    oracle[i] = float(min(e[i]))
+                e_oracle[i][curr_att_frames[0]:curr_att_frames[1]] = float(1)
+            # else:
+            #     e_oracle[i] = e[i]
+            # logging.info("Min e[{0}] is {1}".format(str(i), str(min(e[i]))))
+            # logging.info("Full e[{0}] = {1}".format(str(i), str(e_oracle[i])))
+            # logging.info("Current att frames for {utt} at output index {idx} are {frames}".format(utt=utt, idx=output_index, frames=curr_att_frames))
+        return e_oracle
 
 class NoAtt(torch.nn.Module):
     """No attention"""
@@ -62,7 +90,7 @@ class AttDot(torch.nn.Module):
     :param int att_dim: attention dimension
     """
 
-    def __init__(self, eprojs, dunits, att_dim):
+    def __init__(self, eprojs, dunits, att_dim, epoch_store = None):
         super(AttDot, self).__init__()
         self.mlp_enc = torch.nn.Linear(eprojs, att_dim)
         self.mlp_dec = torch.nn.Linear(dunits, att_dim)
@@ -74,15 +102,61 @@ class AttDot(torch.nn.Module):
         self.enc_h = None
         self.pre_compute_enc_h = None
         self.mask = None
-
+        self.oracle = OracleAtt()
+        self.epoch_store = epoch_store
+    def get_epoch(self):
+        if(self.epoch_store is None):
+            ep = 0
+            # print("EPOCH_STORE is NONE: ", ep)
+        else:
+            ep = self.epoch_store.get_epoch()
+            # print("EPOCH STORE is not NONE: ", ep)
+        return int(ep)
+        
     def reset(self):
         """reset states"""
         self.h_length = None
         self.enc_h = None
         self.pre_compute_enc_h = None
         self.mask = None
+        self.grad_update = 0
+        self.oracle_att = []
 
-    def forward(self, enc_hs_pad, enc_hs_len, dec_z, att_prev, scaling=2.0):
+    def plot_att(self, e, name="w"):
+        # if(uttids is not None):
+        gs = gridspec.GridSpec(5, 2)
+        fig = plt.figure()
+        e = e.cpu().detach().numpy()
+        # plt.imshow(e)
+        for i in range(len(self.uttids)):
+            ax = fig.add_subplot(gs[i])
+            ax.plot(np.array(e[i]).flatten())
+            # ax.set_title(self.uttids[i] + "  " + self.out_phones[i], fontsize=10)
+            ax.set_title(self.uttids[i] , fontsize=10)
+            # ax.set_xlabel(, fontsize=10)
+            # ax.set_ylim([-2,2])
+        fig.tight_layout()
+        plt.subplots_adjust(hspace = 1.0)
+        plt.savefig("/home/neo/MS/espnet/egs/timit/asr1/att_ws/att_oracle_{0}.png".format(name))
+        plt.close()
+
+    def plot_gradient_w(self, grads):
+        grads = grads.cpu().detach().numpy()
+        gs = gridspec.GridSpec(5, 2)
+        fig = plt.figure()
+        fig.suptitle("Global Grad update: " + str(self.grad_update), fontsize=10)
+        for i, grad in enumerate(grads):
+            ax = fig.add_subplot(gs[i])
+            ax.plot(grad)
+            ax.set_title("Update from utterance: " + str(self.uttids[i]), fontsize=6)
+            # ax.set_ylim([-1,1])
+        fig.tight_layout()
+        plt.subplots_adjust(hspace = 1.0)
+        plt.savefig("/home/neo/MS/espnet/egs/timit/asr1/att_ws/att_oracle_grads.png")
+        plt.close()
+        self.grad_update += 1
+
+    def forward(self, enc_hs_pad, enc_hs_len, dec_z, att_prev, uttids=None, output_index = None, output_length = None, ys_out=None, scaling=2.0):
         """AttDot forward
 
         :param torch.Tensor enc_hs_pad: padded encoder hidden state (B x T_max x D_enc)
@@ -95,7 +169,9 @@ class AttDot(torch.nn.Module):
         :return: previous attention weight (B x T_max)
         :rtype: torch.Tensor
         """
-
+        # self.uttids = uttids
+        # logging.info("Att uttids : " + str(uttids))
+        # logging.info("Att enc_hs_pad shape: " + str(enc_hs_pad.size()))
         batch = enc_hs_pad.size(0)
         # pre-compute all h outside the decoder loop
         if self.pre_compute_enc_h is None:
@@ -111,20 +187,38 @@ class AttDot(torch.nn.Module):
 
         e = torch.sum(self.pre_compute_enc_h * torch.tanh(self.mlp_dec(dec_z)).view(batch, 1, self.att_dim),
                       dim=2)  # utt x frame
-
+        
+        # self.plot_att(e, "e")
         # NOTE consider zero padding when compute w.
         if self.mask is None:
             self.mask = to_device(self, make_pad_mask(enc_hs_len))
         e.masked_fill_(self.mask, -float('inf'))
         w = F.softmax(scaling * e, dim=1)
 
+        w_oracle = w
+        
+        epoch = self.get_epoch()
+        if(uttids is not None and epoch < 2):
+            w_oracle = self.oracle(w, uttids, output_index)
+            
+            w_oracle = to_device(self, w_oracle)
+            w_oracle = w * w_oracle
+
+        # logging.info("ID of w before : " + str(id(w)))
+        # w.data = w.data * w_oracle.data
+        # logging.info("ID of w after : " + str(id(w)))
+
+        # self.plot_att(w, "w")
+        # w.register_hook(self.plot_gradient_w)
+        # for row in w:
+        #     logging.info("W is : " + str(row))
+        # self.plot_att(w)
         # weighted sum over flames
         # utt x hdim
         # NOTE use bmm instead of sum(*)
         c = torch.sum(self.enc_h * w.view(batch, self.h_length, 1), dim=1)
-        return c, w
-
-
+        return c, w, w_oracle
+        
 class AttAdd(torch.nn.Module):
     """Additive attention
 
@@ -238,7 +332,7 @@ class AttLoc(torch.nn.Module):
         self.pre_compute_enc_h = None
         self.mask = None
 
-    def forward(self, enc_hs_pad, enc_hs_len, dec_z, att_prev, scaling=2.0):
+    def forward(self, enc_hs_pad, enc_hs_len, dec_z, att_prev, uttids=None, scaling=2.0):
         """AttLoc forward
 
         :param torch.Tensor enc_hs_pad: padded encoder hidden state (B x T_max x D_enc)
@@ -1374,7 +1468,7 @@ class AttForwardTA(torch.nn.Module):
         return c, w
 
 
-def att_for(args, num_att=1):
+def att_for(args, epoch_store = None,  num_att=1):
     """Instantiates an attention module given the program arguments
 
     :param Namespace args: The arguments
@@ -1388,7 +1482,7 @@ def att_for(args, num_att=1):
         if args.atype == 'noatt':
             att = NoAtt()
         elif args.atype == 'dot':
-            att = AttDot(args.eprojs, args.dunits, args.adim)
+            att = AttDot(args.eprojs, args.dunits, args.adim, epoch_store)
         elif args.atype == 'add':
             att = AttAdd(args.eprojs, args.dunits, args.adim)
         elif args.atype == 'location':
