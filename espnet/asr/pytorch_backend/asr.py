@@ -218,9 +218,19 @@ class CustomConverter(object):
 
         ilens = torch.from_numpy(ilens).to(device)
         # NOTE: this is for multi-task learning (e.g., speech translation)
-        ys_pad = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
-                           for y in ys], self.ignore_id).to(device)
-
+        ys_pad0 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[0]], self.ignore_id).to(device)
+        ys_pad1 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[1]], self.ignore_id).to(device)
+        
+        logging.info("DEBUG phn: " + str(ys_pad0.size()))
+        logging.info("DEBUG char: " + str(ys_pad1.size()))
+        # ys_pad = pad_list([torch.from_numpy(np.array(y)).long()], self.ignore_id)
+        # logging.info("asr DEBUG: " + str(" ".join([str(ele) for ele in ys_pad])))
+        # logging.info("asr DEBUG")
+        # for y in ys:
+            # logging.info("asr DEBUG:" + str(np.array(y[0])))
+        ys_pad = ys_pad0
         return xs_pad, ilens, ys_pad
 
 
@@ -341,11 +351,11 @@ def train(args):
                           batch_frames_inout=args.batch_frames_inout)
 
     load_tr = LoadInputsAndTargets(
-        mode='asr', load_output=True, preprocess_conf=args.preprocess_conf,
+        mode='asr', load_output=True, preprocess_conf=args.preprocess_conf, use_second_target=True,
         preprocess_args={'train': True}  # Switch the mode of preprocessing
     )
     load_cv = LoadInputsAndTargets(
-        mode='asr', load_output=True, preprocess_conf=args.preprocess_conf,
+        mode='asr', load_output=True, preprocess_conf=args.preprocess_conf, use_second_target=True,
         preprocess_args={'train': False}  # Switch the mode of preprocessing
     )
     # hack to make batchsize argument as 1

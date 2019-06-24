@@ -182,6 +182,7 @@ class LoadInputsAndTargets(object):
         xs = list(x_feats_dict.values())[0]
 
         if self.load_output:
+            # logging.info("load DEBUG: " + str(y_feats_dict))
             if len(y_feats_dict) == 1:
                 ys = list(y_feats_dict.values())[0]
                 assert len(xs) == len(ys), (len(xs), len(ys))
@@ -189,6 +190,7 @@ class LoadInputsAndTargets(object):
                 # get index of non-zero length samples
                 nonzero_idx = list(filter(lambda i: len(ys[i]) > 0, range(len(ys))))
             elif len(y_feats_dict) > 1:  # multi-speaker asr mode
+                # logging.info("load DEBUG: MORE THAN ONE TARGET" + str(y_feats_dict))
                 ys = list(y_feats_dict.values())
                 assert len(xs) == len(ys[0]), (len(xs), len(ys[0]))
 
@@ -220,14 +222,20 @@ class LoadInputsAndTargets(object):
             if len(y_feats_dict) == 1:
                 ys = [ys[i] for i in nonzero_sorted_idx]
             elif len(y_feats_dict) > 1:  # multi-speaker asr mode
-                ys = zip(*[[y[i] for i in nonzero_sorted_idx] for y in ys])
+                # logging.info("load DEBUG: " + str(list(ys)[1]))
+                # ys = zip(*[[y[i] for i in nonzero_sorted_idx] for y in ys])
+                ys = ys
 
             y_name = list(y_feats_dict.keys())[0]
 
+            
+            # logging.info("ys_name DEBUG : " + str(y_feats_dict) str(y_name))
             # Keepng x_name and y_name, e.g. input1, for future extension
             return_batch = OrderedDict([(x_name, xs), (y_name, ys)])
         else:
             return_batch = OrderedDict([(x_name, xs)])
+
+        # logging.info("load DEBUG: " + " ".join([keys for keys in return_batch]))
         return return_batch, uttid_list
 
     def _create_batch_tts(self, x_feats_dict, y_feats_dict, uttid_list, eos):

@@ -69,13 +69,13 @@ fi
 # 2. Create scp files for outputs
 mkdir -p ${tmpdir}/output
 if [ -n "${bpecode}" ]; then
-    paste -d " " <(awk '{print $1}' ${dir}/text) <(cut -f 2- -d" " ${dir}/text \
+    paste -d " " <(awk '{print $1}' ${dir}/text.${trans_type}) <(cut -f 2- -d" " ${dir}/text.${trans_type} \
         | spm_encode --model=${bpecode} --output_format=piece) \
         > ${tmpdir}/output/token.scp
 elif [ -n "${nlsyms}" ]; then
-    text2token.py -s 1 -n 1 -l ${nlsyms} ${dir}/text --trans_type ${trans_type} > ${tmpdir}/output/token.scp
+    text2token.py -s 1 -n 1 -l ${nlsyms} ${dir}/text.${trans_type} --trans_type ${trans_type} > ${tmpdir}/output/token.scp
 else
-    text2token.py -s 1 -n 1 ${dir}/text --trans_type ${trans_type} > ${tmpdir}/output/token.scp
+    text2token.py -s 1 -n 1 ${dir}/text.${trans_type} --trans_type ${trans_type} > ${tmpdir}/output/token.scp
 fi
 < ${tmpdir}/output/token.scp utils/sym2int.pl --map-oov ${oov} -f 2- ${dic} > ${tmpdir}/output/tokenid.scp
 # +2 comes from CTC blank and EOS
@@ -83,17 +83,17 @@ vocsize=$(tail -n 1 ${dic} | awk '{print $2}')
 odim=$(echo "$vocsize + 2" | bc)
 < ${tmpdir}/output/tokenid.scp awk -v odim=${odim} '{print $1 " " NF-1 "," odim}' > ${tmpdir}/output/shape.scp
 
-cat ${dir}/text > ${tmpdir}/output/text.scp
+cat ${dir}/text.${trans_type} > ${tmpdir}/output/text.${trans_type}.scp
 
 
 # 3. Create scp files for the others
 mkdir -p ${tmpdir}/other
 if [ -n "${lang}" ]; then
-    awk -v lang=${lang} '{print $1 " " lang}' ${dir}/text > ${tmpdir}/other/lang.scp
+    awk -v lang=${lang} '{print $1 " " lang}' ${dir}/text.${trans_type} > ${tmpdir}/other/lang.scp
 fi
 
 if [ -n "${category}" ]; then
-    awk -v category=${category} '{print $1 " " category}' ${dir}/text \
+    awk -v category=${category} '{print $1 " " category}' ${dir}/text.${trans_type} \
         > ${tmpdir}/other/category.scp
 fi
 cat ${dir}/utt2spk > ${tmpdir}/other/utt2spk.scp
