@@ -164,23 +164,23 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
 
             # split data
             # splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
-            # splitjson.py --parts ${nj} ${feat_recog_dir}/data_phn.json
-            # splitjson.py --parts ${nj} ${feat_recog_dir}/data_char.json
+            splitjson.py --parts ${nj} ${feat_recog_dir}/data_phn.json
+            splitjson.py --parts ${nj} ${feat_recog_dir}/data_char.json
 
 
-            # ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
-            # asr_recog.py \
-            # --config ${decode_config} \
-            # --ngpu ${ngpu} \
-            # --backend ${backend} \
-            # --debugmode ${debugmode} \
-            # --verbose ${verbose} \
-            # --recog-phn-json ${feat_recog_dir}/split${nj}utt/data_phn.JOB.json \
-            # --recog-char-json ${feat_recog_dir}/split${nj}utt/data_char.JOB.json \
-            # --phn-result-label ${expdir}/${decode_dir}/data_phn.JOB.json \
-            # --char-result-label ${expdir}/${decode_dir}/data_char.JOB.json \
-            # --model ${expdir}/results/${recog_model} \
-	        # --batchsize ${batchsize}
+            ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
+            asr_recog.py \
+            --config ${decode_config} \
+            --ngpu ${ngpu} \
+            --backend ${backend} \
+            --debugmode ${debugmode} \
+            --verbose ${verbose} \
+            --recog-phn-json ${feat_recog_dir}/split${nj}utt/data_phn.JOB.json \
+            --recog-char-json ${feat_recog_dir}/split${nj}utt/data_char.JOB.json \
+            --phn-result-label ${expdir}/${decode_dir}/phns/data_phn.JOB.json \
+            --char-result-label ${expdir}/${decode_dir}/chars/data_char.JOB.json \
+            --model ${expdir}/results/${recog_model} \
+	        --batchsize ${batchsize}
 
             score_sclite.sh ${expdir}/${decode_dir}/phns ${dict}
             score_sclite.sh ${expdir}/${decode_dir}/chars ${dict}
