@@ -223,14 +223,15 @@ class CustomConverter(object):
         ys_pad1 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
                            for y in ys[1]], self.ignore_id).to(device)
         
-        logging.info("DEBUG phn: " + str(ys_pad0.size()))
-        logging.info("DEBUG char: " + str(ys_pad1.size()))
+        # logging.info("DEBUG phn: " + str(ys_pad0.size()))
+        # logging.info("DEBUG char: " + str(ys_pad1.size()))
         # ys_pad = pad_list([torch.from_numpy(np.array(y)).long()], self.ignore_id)
         # logging.info("asr DEBUG: " + str(" ".join([str(ele) for ele in ys_pad])))
         # logging.info("asr DEBUG")
         # for y in ys:
             # logging.info("asr DEBUG:" + str(np.array(y[0])))
-        ys_pad = ys_pad0
+        # ys_pad = ys_pad0
+        ys_pad = [ys_pad0, ys_pad1]
         return xs_pad, ilens, ys_pad
 
 
@@ -250,9 +251,11 @@ def train(args):
         valid_json = json.load(f)['utts']
     utts = list(valid_json.keys())
     idim = int(valid_json[utts[0]]['input'][0]['shape'][-1])
-    odim = int(valid_json[utts[0]]['output'][0]['shape'][-1])
+    odim0 = int(valid_json[utts[0]]['output'][0]['shape'][-1])
+    odim1 = int(valid_json[utts[0]]['output'][1]['shape'][-1])
+    odims = [odim0, odim1]
     logging.info('#input dims : ' + str(idim))
-    logging.info('#output dims: ' + str(odim))
+    logging.info('#output dims: ' + str(odims))
 
     # specify attention, CTC, hybrid mode
     if args.mtlalpha == 1.0:
@@ -267,7 +270,7 @@ def train(args):
 
     # specify model architecture
     model_class = dynamic_import(args.model_module)
-    model = model_class(idim, odim, args)
+    model = model_class(idim, odims, args)
     assert isinstance(model, ASRInterface)
     subsampling_factor = model.subsample[0]
 
@@ -285,7 +288,7 @@ def train(args):
     model_conf = args.outdir + '/model.json'
     with open(model_conf, 'wb') as f:
         logging.info('writing a model config file to ' + model_conf)
-        f.write(json.dumps((idim, odim, vars(args)),
+        f.write(json.dumps((idim, odims, vars(args)),
                            indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
     for key in sorted(vars(args).keys()):
         logging.info('ARGS: ' + key + ': ' + str(vars(args)[key]))
