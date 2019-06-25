@@ -46,7 +46,7 @@ set -o pipefail
 
 train_set=train_nodev
 train_dev=train_dev
-recog_set="train_dev test"
+recog_set="test"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     for trans_type in phn char; do
@@ -127,7 +127,10 @@ else
 fi
 expdir=exp/${expname}
 mkdir -p ${expdir}
+
 dict=data/lang_1char/${train_set}_units.txt
+dict_phn=data/lang_1char/${train_set}_units.phn.txt
+dict_char=data/lang_1char/${train_set}_units.char.txt
 if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     echo "stage 3: Network Training"
     ${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
@@ -139,6 +142,8 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     --tensorboard-dir tensorboard/${expname} \
     --debugmode ${debugmode} \
     --dict ${dict} \
+    --dict-phn ${dict_phn} \
+    --dict-char ${dict_char} \
     --debugdir ${expdir} \
     --minibatches ${N} \
     --verbose ${verbose} \
@@ -149,30 +154,36 @@ fi
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Decoding"
-    nj=8
+    nj=4
+    ngpu=1
+    batchsize=10
     for rtask in ${recog_set}; do
         (
             decode_dir=decode_${rtask}_$(basename ${decode_config%.*})
             feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
 
             # split data
-            splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
+            # splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
+            # splitjson.py --parts ${nj} ${feat_recog_dir}/data_phn.json
+            # splitjson.py --parts ${nj} ${feat_recog_dir}/data_char.json
 
-            #### use CPU for decoding
-            ngpu=0
 
-            ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
-            asr_recog.py \
-            --config ${decode_config} \
-            --ngpu ${ngpu} \
-            --backend ${backend} \
-            --debugmode ${debugmode} \
-            --verbose ${verbose} \
-            --recog-json ${feat_recog_dir}/split${nj}utt/data.JOB.json \
-            --result-label ${expdir}/${decode_dir}/data.JOB.json \
-            --model ${expdir}/results/${recog_model}
+            # ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
+            # asr_recog.py \
+            # --config ${decode_config} \
+            # --ngpu ${ngpu} \
+            # --backend ${backend} \
+            # --debugmode ${debugmode} \
+            # --verbose ${verbose} \
+            # --recog-phn-json ${feat_recog_dir}/split${nj}utt/data_phn.JOB.json \
+            # --recog-char-json ${feat_recog_dir}/split${nj}utt/data_char.JOB.json \
+            # --phn-result-label ${expdir}/${decode_dir}/data_phn.JOB.json \
+            # --char-result-label ${expdir}/${decode_dir}/data_char.JOB.json \
+            # --model ${expdir}/results/${recog_model} \
+	        # --batchsize ${batchsize}
 
-            score_sclite.sh ${expdir}/${decode_dir} ${dict}
+            score_sclite.sh ${expdir}/${decode_dir}/phns ${dict}
+            score_sclite.sh ${expdir}/${decode_dir}/chars ${dict}
 
         ) &
     done

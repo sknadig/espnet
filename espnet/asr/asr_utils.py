@@ -84,7 +84,7 @@ class PlotAttentionReport(extension.Extension):
     :param bool reverse: If True, input and output length are reversed
     """
 
-    def __init__(self, att_vis_fn, data, outdir, converter, transform, device, reverse=False):
+    def __init__(self, att_vis_fn, data, outdir, converter, transform, device, reverse=False, decoder_idx=0):
         self.att_vis_fn = att_vis_fn
         self.data = copy.deepcopy(data)
         self.outdir = outdir

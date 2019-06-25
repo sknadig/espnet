@@ -106,7 +106,7 @@ class Decoder(torch.nn.Module):
                 z_list[l] = self.decoder[l](self.dropout_dec[l - 1](z_list[l - 1]), z_prev[l])
         return z_list, c_list
 
-    def forward(self, hs_pad, hlens, ys_pad, strm_idx=0):
+    def forward(self, hs_pad, hlens, ys_pad, trans_type, strm_idx=0):
         """Decoder forward
 
         :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
@@ -204,8 +204,8 @@ class Decoder(torch.nn.Module):
                 seq_true = [self.char_list[int(idx)] for idx in idx_true]
                 seq_hat = "".join(seq_hat)
                 seq_true = "".join(seq_true)
-                logging.info("groundtruth[%d]: " % i + seq_true)
-                logging.info("prediction [%d]: " % i + seq_hat)
+                logging.info(trans_type + "\t" + "groundtruth[%d]: " % i + seq_true)
+                logging.info(trans_type + "\t" + "prediction [%d]: " % i + seq_hat)
 
         if self.labeldist is not None:
             if self.vlabeldist is None:
@@ -684,8 +684,8 @@ class Decoder(torch.nn.Module):
         return new_state
 
 
-def decoder_for(args, odim, sos, eos, att, labeldist):
+def decoder_for(args, odim, sos, eos, att, labeldist, symbol_list):
     return Decoder(args.eprojs, odim, args.dtype, args.dlayers, args.dunits, sos, eos, att, args.verbose,
-                   args.char_list, labeldist,
+                   symbol_list, labeldist,
                    args.lsm_weight, args.sampling_probability, args.dropout_rate_decoder,
                    args.context_residual)

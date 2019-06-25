@@ -231,6 +231,8 @@ class CustomConverter(object):
         # for y in ys:
             # logging.info("asr DEBUG:" + str(np.array(y[0])))
         # ys_pad = ys_pad0
+        logging.info("asr DEBUG: ys_pad0" + str(ys_pad0.size()))
+        logging.info("asr DEBUG: ys_pad1" + str(ys_pad1.size()))
         ys_pad = [ys_pad0, ys_pad1]
         return xs_pad, ilens, ys_pad
 
@@ -408,10 +410,16 @@ def train(args):
         else:
             att_vis_fn = model.calculate_all_attentions
             plot_class = model.attention_plot_class
-        att_reporter = plot_class(
+
+        att_reporter0 = plot_class(
             att_vis_fn, data, args.outdir + "/att_ws",
-            converter=converter, transform=load_cv, device=device)
-        trainer.extend(att_reporter, trigger=(1, 'epoch'))
+            converter=converter, transform=load_cv, device=device, decoder_idx=0)
+        att_reporter1 = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws",
+            converter=converter, transform=load_cv, device=device, decoder_idx=1)
+
+        trainer.extend(att_reporter0, trigger=(1, 'epoch'))
+        trainer.extend(att_reporter0, trigger=(1, 'epoch'))
     else:
         att_reporter = None
 
@@ -479,7 +487,8 @@ def train(args):
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
         writer = SummaryWriter(args.tensorboard_dir)
-        trainer.extend(TensorboardLogger(writer, att_reporter))
+        trainer.extend(TensorboardLogger(writer, att_reporter0))
+        trainer.extend(TensorboardLogger(writer, att_reporter1))
     # Run the training
     trainer.run()
     check_early_stop(trainer, args.epochs)
@@ -545,9 +554,17 @@ def recog(args):
             rnnlm.cuda()
 
     # read json data
-    with open(args.recog_json, 'rb') as f:
-        js = json.load(f)['utts']
+    # with open(args.recog_json, 'rb') as f:
+    #     js = json.load(f)['utts']
+
+    with open(args.recog_phn_json, 'rb') as f:
+        phn_js = json.load(f)['utts']
+    with open(args.recog_char_json, 'rb') as f:
+        char_js = json.load(f)['utts']
+
     new_js = {}
+    new_phn_js = {}
+    new_char_js = {}
 
     load_inputs_and_targets = LoadInputsAndTargets(
         mode='asr', load_output=False, sort_in_input_length=False,
@@ -592,7 +609,9 @@ def recog(args):
                                 nbest_hyps[n]['score'] += hyps[n]['score']
                 else:
                     nbest_hyps = model.recognize(feat, args, train_args.char_list, rnnlm)
-                new_js[name] = add_results_to_json(js[name], nbest_hyps, train_args.char_list)
+                # new_js[name] = add_results_to_json(js[name], nbest_hyps, train_args.char_list)
+                phn_js[name] = add_results_to_json(js[name], nbest_hyps, train_args.char_list)
+                char_js[name] = add_results_to_json(js[name], nbest_hyps, train_args.char_list)
 
     else:
         def grouper(n, iterable, fillvalue=None):
@@ -600,24 +619,37 @@ def recog(args):
             return zip_longest(*kargs, fillvalue=fillvalue)
 
         # sort data
-        keys = list(js.keys())
-        feat_lens = [js[key]['input'][0]['shape'][0] for key in keys]
+        keys = list(phn_js.keys())
+        feat_lens = [phn_js[key]['input'][0]['shape'][0] for key in keys]
         sorted_index = sorted(range(len(feat_lens)), key=lambda i: -feat_lens[i])
         keys = [keys[i] for i in sorted_index]
 
         with torch.no_grad():
             for names in grouper(args.batchsize, keys, None):
                 names = [name for name in names if name]
-                batch = [(name, js[name]) for name in names]
+                batch = [(name, phn_js[name]) for name in names]
                 feats = load_inputs_and_targets(batch)[0]
-                nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm)
+                # nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm)
+                phn_nbest_hyps = model.recognize_batch(feats, args, train_args.phn_list, rnnlm=rnnlm, trans_type = "phn")
+                char_nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm, trans_type = "char")
 
-                for i, nbest_hyp in enumerate(nbest_hyps):
+                # for i, nbest_hyp in enumerate(nbest_hyps):
+                #     name = names[i]
+                #     new_js[name] = add_results_to_json(js[name], nbest_hyp, train_args.char_list)
+
+                for i, nbest_hyp in enumerate(phn_nbest_hyps):
                     name = names[i]
-                    new_js[name] = add_results_to_json(js[name], nbest_hyp, train_args.char_list)
+                    new_phn_js[name] = add_results_to_json(phn_js[name], nbest_hyp, train_args.phn_list)
 
-    with open(args.result_label, 'wb') as f:
-        f.write(json.dumps({'utts': new_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
+                for i, nbest_hyp in enumerate(char_nbest_hyps):
+                    name = names[i]
+                    new_char_js[name] = add_results_to_json(char_js[name], nbest_hyp, train_args.char_list)
+
+    with open(args.phn_result_label, 'wb') as f:
+        f.write(json.dumps({'utts': new_phn_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
+    
+    with open(args.char_result_label, 'wb') as f:
+        f.write(json.dumps({'utts': new_char_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
 
 
 def enhance(args):

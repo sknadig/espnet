@@ -42,6 +42,11 @@ def get_parser():
                         help='Debugmode')
     parser.add_argument('--dict', required=True,
                         help='Dictionary')
+    parser.add_argument('--dict-phn', required=True,
+                        help='Dictionary')
+    parser.add_argument('--dict-char', required=True,
+                        help='Dictionary')
+
     parser.add_argument('--seed', default=1, type=int,
                         help='Random seed')
     parser.add_argument('--debugdir', type=str,
@@ -339,8 +344,8 @@ def main(cmd_args):
     np.random.seed(args.seed)
 
     # load dictionary for debug log
-    if args.dict is not None:
-        with open(args.dict, 'rb') as f:
+    if args.dict_char is not None:
+        with open(args.dict_char, 'rb') as f:
             dictionary = f.readlines()
         char_list = [entry.decode('utf-8').split(' ')[0]
                      for entry in dictionary]
@@ -349,6 +354,19 @@ def main(cmd_args):
         args.char_list = char_list
     else:
         args.char_list = None
+
+    if args.dict_phn is not None:
+        with open(args.dict_phn, 'rb') as f:
+            dictionary = f.readlines()
+        char_list = [entry.decode('utf-8').split(' ')[0]
+                     for entry in dictionary]
+        char_list.insert(0, '<blank>')
+        char_list.append('<eos>')
+        args.phn_list = char_list
+    else:
+        args.phn_list = None
+    
+    
 
     # train
     logging.info('backend = ' + args.backend)

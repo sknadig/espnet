@@ -67,6 +67,7 @@ class CTC(torch.nn.Module):
             (x.size(0) for x in ys), dtype=np.int32))
 
         # zero padding for hs
+        logging.info("ctc DEBUG: hs_pad type" + str(hs_pad.is_cuda))
         ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
 
         # zero padding for ys

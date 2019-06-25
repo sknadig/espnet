@@ -22,7 +22,7 @@ fi
 dir=$1
 dic=$2
 
-concatjson.py ${dir}/data.*.json > ${dir}/data.json
+concatjson.py ${dir}/data_.*.json > ${dir}/data.json
 json2trn.py ${dir}/data.json ${dic} ${dir}/ref.trn ${dir}/hyp.trn
 
 if $remove_blank; then

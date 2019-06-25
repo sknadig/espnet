@@ -46,7 +46,15 @@ def get_parser():
     # task related
     parser.add_argument('--recog-json', type=str,
                         help='Filename of recognition data (json)')
-    parser.add_argument('--result-label', type=str, required=True,
+    parser.add_argument('--recog-phn-json', type=str,
+                        help='Filename of recognition data (json)')
+    parser.add_argument('--recog-char-json', type=str,
+                        help='Filename of recognition data (json)')
+    # parser.add_argument('--result-label', type=str, required=True,
+                        # help='Filename of result label data (json)')
+    parser.add_argument('--phn-result-label', type=str, required=True,
+                        help='Filename of result label data (json)')
+    parser.add_argument('--char-result-label', type=str, required=True,
                         help='Filename of result label data (json)')
     # model (parameter) related
     parser.add_argument('--model', type=str, required=True,
