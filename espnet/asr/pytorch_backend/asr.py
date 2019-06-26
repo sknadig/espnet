@@ -412,14 +412,14 @@ def train(args):
             plot_class = model.attention_plot_class
 
         att_reporter0 = plot_class(
-            att_vis_fn, data, args.outdir + "/att_ws",
-            converter=converter, transform=load_cv, device=device, decoder_idx=0)
+            att_vis_fn, data, args.outdir + "/att_ws_phn",
+            converter=converter, transform=load_cv, device=device, decoder_id=0)
         att_reporter1 = plot_class(
-            att_vis_fn, data, args.outdir + "/att_ws",
-            converter=converter, transform=load_cv, device=device, decoder_idx=1)
+            att_vis_fn, data, args.outdir + "/att_ws_char",
+            converter=converter, transform=load_cv, device=device, decoder_id=1)
 
         trainer.extend(att_reporter0, trigger=(1, 'epoch'))
-        trainer.extend(att_reporter0, trigger=(1, 'epoch'))
+        trainer.extend(att_reporter1, trigger=(1, 'epoch'))
     else:
         att_reporter = None
 
@@ -487,8 +487,8 @@ def train(args):
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
         writer = SummaryWriter(args.tensorboard_dir)
-        trainer.extend(TensorboardLogger(writer, att_reporter0))
-        trainer.extend(TensorboardLogger(writer, att_reporter1))
+        trainer.extend(TensorboardLogger(writer, att_reporter0, decoder_id=0))
+        trainer.extend(TensorboardLogger(writer, att_reporter1, decoder_id=1))
     # Run the training
     trainer.run()
     check_early_stop(trainer, args.epochs)

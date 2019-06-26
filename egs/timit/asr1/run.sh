@@ -157,10 +157,13 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     nj=4
     ngpu=1
     batchsize=10
+    
     for rtask in ${recog_set}; do
         (
             decode_dir=decode_${rtask}_$(basename ${decode_config%.*})
             feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
+            mkdir -p ${expdir}/${decode_dir}/phns/
+            mkdir -p ${expdir}/${decode_dir}/chars/
 
             # split data
             # splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
@@ -182,9 +185,15 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
             --model ${expdir}/results/${recog_model} \
 	        --batchsize ${batchsize}
 
-            score_sclite.sh ${expdir}/${decode_dir}/phns ${dict}
-            score_sclite.sh ${expdir}/${decode_dir}/chars ${dict}
+            concatjson.py ${expdir}/${decode_dir}/phns/data_*.json > ${expdir}/${decode_dir}/phns/data.json
+            concatjson.py ${expdir}/${decode_dir}/chars/data_*.json > ${expdir}/${decode_dir}/chars/data.json
 
+            json2trn.py ${expdir}/${decode_dir}/phns/data.json data/lang_1char/${train_set}_units.phn.txt --refs ${expdir}/${decode_dir}/phns/ref.trn --hyps ${expdir}/${decode_dir}/phns/hyp.trn
+            json2trn.py ${expdir}/${decode_dir}/chars/data.json data/lang_1char/${train_set}_units.char.txt --refs ${expdir}/${decode_dir}/chars/ref.trn --hyps ${expdir}/${decode_dir}/chars/hyp.trn
+
+            sclite -r ${expdir}/${decode_dir}/phns/ref.trn -h ${expdir}/${decode_dir}/phns/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/phns/results.txt
+            sclite -r ${expdir}/${decode_dir}/chars/ref.trn -h ${expdir}/${decode_dir}/chars/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/chars/results.txt
+            
         ) &
     done
     wait

@@ -84,7 +84,7 @@ class PlotAttentionReport(extension.Extension):
     :param bool reverse: If True, input and output length are reversed
     """
 
-    def __init__(self, att_vis_fn, data, outdir, converter, transform, device, reverse=False, decoder_idx=0):
+    def __init__(self, att_vis_fn, data, outdir, converter, transform, device, reverse=False, decoder_id=0):
         self.att_vis_fn = att_vis_fn
         self.data = copy.deepcopy(data)
         self.outdir = outdir
@@ -94,6 +94,7 @@ class PlotAttentionReport(extension.Extension):
         self.reverse = reverse
         if not os.path.exists(self.outdir):
             os.makedirs(self.outdir)
+        self.decoder_id = decoder_id
 
     def __call__(self, trainer):
         att_ws = self.get_attention_weights()
@@ -103,20 +104,25 @@ class PlotAttentionReport(extension.Extension):
             att_w = self.get_attention_weight(idx, att_w)
             self._plot_and_save_attention(att_w, filename.format(trainer))
 
-    def log_attentions(self, logger, step):
+    def log_attentions(self, logger, step, decoder_id):
+
+        if(decoder_id == 0):
+            tag = "phn"
+        elif(decoder_id == 1):
+            tag = "char"
         att_ws = self.get_attention_weights()
         for idx, att_w in enumerate(att_ws):
             att_w = self.get_attention_weight(idx, att_w)
             plot = self.draw_attention_plot(att_w)
-            logger.add_figure("%s" % (self.data[idx][0]), plot.gcf(), step)
+            logger.add_figure(tag+"_"+"%s" % (self.data[idx][0]), plot.gcf(), step)
             plot.clf()
 
     def get_attention_weights(self):
         batch = self.converter([self.transform(self.data)], self.device)
         if isinstance(batch, tuple):
-            att_ws = self.att_vis_fn(*batch)
+            att_ws = self.att_vis_fn(*batch, decoder_id=self.decoder_id)
         else:
-            att_ws = self.att_vis_fn(**batch)
+            att_ws = self.att_vis_fn(**batch, decoder_id=self.decoder_id)
         return att_ws
 
     def get_attention_weight(self, idx, att_w):
@@ -151,7 +157,7 @@ class PlotAttentionReport(extension.Extension):
         plt = self.draw_attention_plot(att_w)
         plt.savefig(filename)
         plt.close()
-
+        np.save(filename.replace("png", "npy"), att_w)
 
 def restore_snapshot(model, snapshot, load_fn=chainer.serializers.load_npz):
     """Extension to restore snapshot"""

@@ -111,6 +111,8 @@ def get_parser():
     parser.add_argument('--spa', action='store_true',
                         help='Enable speaker parallel attention.')
     # decoder
+    parser.add_argument('--tap-enc-phn', type=int, default=1,
+                        help='Tap encoder output for phoneme recognition')
     parser.add_argument('--dtype', default='lstm', type=str,
                         choices=['lstm', 'gru'],
                         help='Type of decoder network architecture')

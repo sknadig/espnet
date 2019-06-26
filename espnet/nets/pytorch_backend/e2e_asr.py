@@ -36,8 +36,28 @@ CTC_LOSS_THRESHOLD = 10000
 
 class Reporter(chainer.Chain):
     """A chainer reporter wrapper"""
+        
+    def report_phn(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
+        reporter.report({'phn_loss_ctc': loss_ctc}, self)
+        reporter.report({'phn_loss_att': loss_att}, self)
+        reporter.report({'phn_acc': acc}, self)
+        reporter.report({'phn_cer_ctc': cer_ctc}, self)
+        reporter.report({'phn_cer': cer}, self)
+        reporter.report({'phn_wer': wer}, self)
+        logging.info('phn_mtl loss:' + str(mtl_loss))
+        reporter.report({'phn_loss': mtl_loss}, self)
 
-    def report(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
+    def report_char(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
+        reporter.report({'char_loss_ctc': loss_ctc}, self)
+        reporter.report({'char_loss_att': loss_att}, self)
+        reporter.report({'char_acc': acc}, self)
+        reporter.report({'char_cer_ctc': cer_ctc}, self)
+        reporter.report({'char_cer': cer}, self)
+        reporter.report({'char_wer': wer}, self)
+        logging.info('char_mtl loss:' + str(mtl_loss))
+        reporter.report({'char_loss': mtl_loss}, self)
+
+    def report_all(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
         reporter.report({'loss_ctc': loss_ctc}, self)
         reporter.report({'loss_att': loss_att}, self)
         reporter.report({'acc': acc}, self)
@@ -47,6 +67,7 @@ class Reporter(chainer.Chain):
         logging.info('mtl loss:' + str(mtl_loss))
         reporter.report({'loss': mtl_loss}, self)
 
+        
 
 class E2E(ASRInterface, torch.nn.Module):
     """E2E module
@@ -74,7 +95,7 @@ class E2E(ASRInterface, torch.nn.Module):
         self.space = args.sym_space
         self.blank = args.sym_blank
         self.reporter = Reporter()
-
+        self.tap_phn_enc = int(args.tap_enc_phn)
         # below means the last number becomes eos/sos ID
         # note that sos/eos IDs are identical
         # self.sos = odim - 1
@@ -235,7 +256,7 @@ class E2E(ASRInterface, torch.nn.Module):
             hs_pad, hlens = xs_pad, ilens
 
         # 1. Encoder
-        hs_pad, hlens, _ = self.enc(hs_pad, hlens)
+        hs_pad, hlens, _ = self.enc(hs_pad, hlens, tap_layer=self.tap_phn_enc)
 
         # 2. CTC loss
         if self.mtlalpha == 0:
@@ -326,8 +347,18 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_ctc_data = float(self.loss_ctc)
 
         loss_data = float(self.loss)
+
+
+        phn_loss_ctc_data = loss_ctc_data
+        phn_loss_att_data = loss_att_data
+        phn_acc = acc
+        phn_cer_ctc = cer_ctc
+        phn_cer = cer
+        phn_wer = wer
+        phn_loss_data = loss_data
+
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
-            self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data)
+            self.reporter.report_phn(phn_loss_ctc_data, phn_loss_att_data, phn_acc, phn_cer_ctc, phn_cer, phn_wer, phn_loss_data)
         else:
             logging.warning('loss (=%f) is not correct', loss_data)
         
@@ -436,8 +467,21 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_ctc_data = float(self.loss_ctc)
 
         loss_data = float(self.loss)
+
+        char_loss_ctc_data = loss_ctc_data
+        char_loss_att_data = loss_att_data
+        char_acc = acc
+        char_cer_ctc = cer_ctc
+        char_cer = cer
+        char_wer = wer
+        char_loss_data = loss_data
+
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
-            self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data)
+            self.reporter.report_char(char_loss_ctc_data, char_loss_att_data, char_acc, char_cer_ctc, char_cer, char_wer, char_loss_data)
+            self.reporter.report_all(char_loss_ctc_data + phn_loss_ctc_data, \
+                char_loss_att_data + phn_loss_att_data, (char_acc + phn_acc)/2, \
+                    (char_cer_ctc + phn_cer_ctc)/2,  (char_cer + phn_cer)/2 , (char_wer + phn_wer)/2,\
+                         (char_loss_data + phn_loss_data)/2)
         else:
             logging.warning('loss (=%f) is not correct', loss_data)
         
@@ -591,7 +635,8 @@ class E2E(ASRInterface, torch.nn.Module):
             # 2. Decoder
             if(decoder_id == 0):
                 att_ws = self.dec0.calculate_all_attentions(hpad, hlens, ys_pad)
-
+            elif(decoder_id == 1):
+                att_ws = self.dec1.calculate_all_attentions(hpad, hlens, ys_pad)
         return att_ws
 
     def subsample_frames(self, x):
