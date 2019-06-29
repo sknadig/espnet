@@ -103,17 +103,17 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
 
         # make json labels
         data2json.sh --feat ${feat_tr_dir}/feats.scp --trans_type ${trans_type} \
-        data/${train_set} ${dict} > ${feat_tr_dir}/data.${trans_type}.json
+        data/${train_set} ${dict} > ${feat_tr_dir}/data_${trans_type}.json
         data2json.sh --feat ${feat_dt_dir}/feats.scp --trans_type ${trans_type} \
-        data/${train_dev} ${dict} > ${feat_dt_dir}/data.${trans_type}.json
+        data/${train_dev} ${dict} > ${feat_dt_dir}/data_${trans_type}.json
         for rtask in ${recog_set}; do
             feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
             data2json.sh --feat ${feat_recog_dir}/feats.scp --trans_type ${trans_type} \
-            data/${rtask} ${dict} > ${feat_recog_dir}/data.${trans_type}.json
+            data/${rtask} ${dict} > ${feat_recog_dir}/data_${trans_type}.json
         done
     done
     for set in ${train_set} ${train_dev} test; do
-        merge_jsons.py --phn-json ${dumpdir}/${set}/delta${do_delta}/data.phn.json --char-json ${dumpdir}/${set}/delta${do_delta}/data.char.json --out-json ${dumpdir}/${set}/delta${do_delta}/data.json 
+        merge_jsons.py --phn-json ${dumpdir}/${set}/delta${do_delta}/data_phn.json --char-json ${dumpdir}/${set}/delta${do_delta}/data_char.json --out-json ${dumpdir}/${set}/delta${do_delta}/data.json 
     done
 fi
 
