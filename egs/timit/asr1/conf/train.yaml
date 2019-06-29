@@ -29,4 +29,4 @@ patience: 3
 
 # scheduled sampling option
 sampling-probability: 0.1
-tap-enc-phn: 1
+tap-enc-phn: 4

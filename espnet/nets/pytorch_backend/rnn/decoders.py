@@ -622,7 +622,6 @@ class Decoder(torch.nn.Module):
 
         # get length info
         olength = ys_out_pad.size(1)
-
         # initialization
         c_list = [self.zero_state(hs_pad)]
         z_list = [self.zero_state(hs_pad)]

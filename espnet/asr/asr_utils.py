@@ -101,7 +101,7 @@ class PlotAttentionReport(extension.Extension):
         for idx, att_w in enumerate(att_ws):
             filename = "%s/%s.ep.{.updater.epoch}.png" % (
                 self.outdir, self.data[idx][0])
-            att_w = self.get_attention_weight(idx, att_w)
+            att_w = self.get_attention_weight(idx, att_w, self.decoder_id)
             self._plot_and_save_attention(att_w, filename.format(trainer))
 
     def log_attentions(self, logger, step, decoder_id):
@@ -112,7 +112,7 @@ class PlotAttentionReport(extension.Extension):
             tag = "char"
         att_ws = self.get_attention_weights()
         for idx, att_w in enumerate(att_ws):
-            att_w = self.get_attention_weight(idx, att_w)
+            att_w = self.get_attention_weight(idx, att_w, self.decoder_id)
             plot = self.draw_attention_plot(att_w)
             logger.add_figure(tag+"_"+"%s" % (self.data[idx][0]), plot.gcf(), step)
             plot.clf()
@@ -125,12 +125,13 @@ class PlotAttentionReport(extension.Extension):
             att_ws = self.att_vis_fn(**batch, decoder_id=self.decoder_id)
         return att_ws
 
-    def get_attention_weight(self, idx, att_w):
+    def get_attention_weight(self, idx, att_w, decoder_id):
+        logging.info("ATT DEBUG: att_w shape " + str(att_w.shape))
         if self.reverse:
             dec_len = int(self.data[idx][1]['input'][0]['shape'][0])
-            enc_len = int(self.data[idx][1]['output'][0]['shape'][0])
+            enc_len = int(self.data[idx][1]['output'][decoder_id]['shape'][0])
         else:
-            dec_len = int(self.data[idx][1]['output'][0]['shape'][0])
+            dec_len = int(self.data[idx][1]['output'][decoder_id]['shape'][0])
             enc_len = int(self.data[idx][1]['input'][0]['shape'][0])
         if len(att_w.shape) == 3:
             att_w = att_w[:, :dec_len, :enc_len]
