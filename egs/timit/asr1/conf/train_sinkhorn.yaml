@@ -29,4 +29,4 @@ patience: 3
 
 # scheduled sampling option
 sampling-probability: 0.1
-oracle-w: 0.0
+oracle-w: 1.0
