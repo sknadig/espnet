@@ -151,6 +151,7 @@ class PlotAttentionReport(extension.Extension):
         plt = self.draw_attention_plot(att_w)
         plt.savefig(filename)
         plt.close()
+        np.save(filename.replace("png", "npy"), att_w)
 
 
 def restore_snapshot(model, snapshot, load_fn=chainer.serializers.load_npz):
