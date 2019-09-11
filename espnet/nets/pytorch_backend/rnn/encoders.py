@@ -144,10 +144,42 @@ class No_enc(torch.nn.Module):
 
     def __init__(self):
         super(No_enc, self).__init__()
+        
+    def forward(self, xs_pad, ilens, prev_state=None):
+        logging.info("No Encoder!")
+        xs_pack = pack_padded_sequence(xs_pad, ilens, batch_first=True)
+        ys_pad, ilens = pad_packed_sequence(xs_pack, batch_first=True)
+        return xs_pad, ilens, None  # x: utt list of frame x dim
+
+class DNN_enc(torch.nn.Module):
+    """RNN module
+
+    :param int idim: dimension of inputs
+    :param int elayers: number of encoder layers
+    :param int cdim: number of rnn units (resulted in cdim * 2 if bidirectional)
+    :param int hdim: number of final projection units
+    :param float dropout: dropout rate
+    :param str typ: The RNN type
+    """
+
+    def __init__(self, idim, elayers, eunits, eprojs, subsample, dropout):
+        super(DNN_enc, self).__init__()
+        self.l1 = torch.nn.Linear(idim, eprojs)
+        self.l2 = torch.nn.Linear(eprojs, eprojs)
+        self.l3 = torch.nn.Linear(eprojs, eprojs)
+        self.l4 = torch.nn.Linear(eprojs, eprojs)
+        self.l5 = torch.nn.Linear(eprojs, eprojs)
 
     def forward(self, xs_pad, ilens, prev_state=None):
         logging.info("No Encoder!")
         xs_pack = pack_padded_sequence(xs_pad, ilens, batch_first=True)
+
+        xs_pad = self.l1(xs_pad)
+        xs_pad = self.l2(xs_pad)
+        xs_pad = self.l3(xs_pad)
+        xs_pad = self.l4(xs_pad)
+        xs_pad = self.l5(xs_pad)
+
         ys_pad, ilens = pad_packed_sequence(xs_pack, batch_first=True)
         return xs_pad, ilens, None  # x: utt list of frame x dim
 
@@ -250,7 +282,9 @@ class Encoder(torch.nn.Module):
                                                     dropout, typ=typ)])
                 logging.info('Use CNN-VGG + ' + typ.upper() + ' for encoder')
         elif (etype == "no_enc"):
-            self.enc = [No_enc()]
+            self.enc = torch.nn.ModuleList([No_enc()])
+        elif(etype == "dnn"):
+            self.enc = torch.nn.ModuleList([DNN_enc(idim, elayers, eunits, eprojs, subsample, dropout)])
         else:
             if etype[-1] == "p":
                 self.enc = torch.nn.ModuleList(
@@ -270,13 +304,13 @@ class Encoder(torch.nn.Module):
         :rtype: torch.Tensor
         """
         logging.info("debug input shapes: ")
-        logging.info(str(xs_pad.shape))
-        logging.info(str(ilens.shape))
+        # logging.info(str(xs_pad.shape))
+        # logging.info(str(ilens.shape))
 
-        logging.info(str(xs_pad))
-        logging.info(str(ilens))
-        logging.info("xs_pad is CUDA? : " + str(xs_pad.is_cuda))
-        logging.info("ilens is CUDA? : " + str(ilens.is_cuda))
+        # logging.info(str(xs_pad))
+        # logging.info(str(ilens))
+        # logging.info("xs_pad is CUDA? : " + str(xs_pad.is_cuda))
+        # logging.info("ilens is CUDA? : " + str(ilens.is_cuda))
         if prev_states is None:
             prev_states = [None] * len(self.enc)
         assert len(prev_states) == len(self.enc)
@@ -285,14 +319,14 @@ class Encoder(torch.nn.Module):
         for module, prev_state in zip(self.enc, prev_states):
             xs_pad, ilens, states = module(xs_pad, ilens, prev_state=prev_state)
             logging.info("debug enc out shapes: ")
-            logging.info(str(xs_pad.shape))
-            logging.info(str(ilens.shape))
+            # logging.info(str(xs_pad.shape))
+            # logging.info(str(ilens.shape))
 
-            logging.info(str(xs_pad))
-            logging.info(str(ilens))
+            # logging.info(str(xs_pad))
+            # logging.info(str(ilens))
             
-            logging.info("xs_pad is CUDA? : " + str(xs_pad.is_cuda))
-            logging.info("ilens is CUDA? : " + str(ilens.is_cuda))
+            # logging.info("xs_pad is CUDA? : " + str(xs_pad.is_cuda))
+            # logging.info("ilens is CUDA? : " + str(ilens.is_cuda))
             current_states.append(states)
 
         # make mask to remove bias value in padded part
