@@ -150,6 +150,7 @@ class PlotAttentionReport(extension.Extension):
     def _plot_and_save_attention(self, att_w, filename):
         plt = self.draw_attention_plot(att_w)
         plt.savefig(filename)
+        np.save(filename.replace("png", "npy"), att_w)
         plt.close()
 
 

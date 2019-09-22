@@ -18,7 +18,7 @@ verbose=1      # verbose option
 resume=        # Resume the training from snapshot
 
 # feature configuration
-do_delta=false
+do_delta=true
 
 train_config=conf/train.yaml
 decode_config=conf/decode.yaml
@@ -46,7 +46,7 @@ set -o pipefail
 
 train_set=train_nodev
 train_dev=train_dev
-recog_set="test"
+recog_set="train_nodev test"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     local/timit_data_prep.sh ${timit} ${trans_type} || exit 1
@@ -65,7 +65,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     fbankdir=fbank
     # Generate the fbank features; by default 80-dimensional fbanks with pitch on each frame
     for x in test train dev; do
-        steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 8 --write_utt2num_frames true \
+        steps/make_mfcc.sh --cmd "$train_cmd" --nj 8 --write_utt2num_frames true \
         data/${x} exp/make_fbank/${x} ${fbankdir}
     done
 
