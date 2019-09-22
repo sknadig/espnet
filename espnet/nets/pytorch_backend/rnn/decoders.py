@@ -183,7 +183,7 @@ class Decoder(torch.nn.Module):
             att_c, att_w = self.att[att_idx](hs_pad, hlens, self.dropout_dec[0](z_list[0]), att_w)
             ep = self.epoch_store.get_epoch()
             att_w_oracle = att_w
-            if(uttids is not None and ep < 1):
+            if(uttids is not None and ep < 20):
                 logging.info("ORACLE UPDATE: epoch {0}, so updating with ORACLE loss".format(str(ep)))
                 att_w_oracle = self.oracle(att_w, uttids, i)
                 att_w_oracle = to_device(self, att_w_oracle)

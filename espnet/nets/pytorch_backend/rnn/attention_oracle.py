@@ -16,7 +16,7 @@ from matplotlib import gridspec
 class OracleAtt(torch.nn.Module):
     def __init__(self):
         super(OracleAtt, self).__init__()
-        self.frame_dict = pickle.load(open("/home/neo/MS/espnet/egs/timit/asr1/frame_level_dict.pkl", "rb"))
+        self.frame_dict = pickle.load(open("/home/shree/espnet/egs/timit/asr1/frame_level_dict.pkl", "rb"))
     def __call__(self, e, uttids, output_index):
         # logging.info("Normal e size: " + str(e.size()))
         # e_oracle = torch.ones(e.size()) * -float('inf')
