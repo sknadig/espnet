@@ -16,6 +16,7 @@ from espnet.nets.e2e_asr_common import end_detect
 from espnet.nets.pytorch_backend.rnn.attentions import att_to_numpy
 from espnet.nets.pytorch_backend.rnn.attention_oracle import OracleAtt
 from espnet.nets.pytorch_backend.rnn.shloss import SinkhornDistance
+from geomloss import SamplesLoss
 
 from espnet.nets.pytorch_backend.nets_utils import append_ids
 from espnet.nets.pytorch_backend.nets_utils import get_last_yseq
@@ -95,7 +96,9 @@ class Decoder(torch.nn.Module):
         self.oracle = OracleAtt()
         self.epoch_store = epoch_store
         self.logzero = -10000000000.0
-        self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
+        # self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
+        self.sink_horn_loss = SamplesLoss(p=1, blur=0.01)
+        
     def zero_state(self, hs_pad):
         return hs_pad.new_zeros(hs_pad.size(0), self.dunits)
 
