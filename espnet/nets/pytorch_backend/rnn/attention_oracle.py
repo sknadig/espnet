@@ -19,8 +19,9 @@ class OracleAtt(torch.nn.Module):
         self.frame_dict = pickle.load(open("/home/shree/espnet/egs/timit/asr1/frame_level_dict.pkl", "rb"))
     def __call__(self, e, uttids, output_index):
         # logging.info("Normal e size: " + str(e.size()))
-        # e_oracle = torch.ones(e.size()) * -float('inf')
-        e_oracle = torch.zeros(e.size()).to("cuda")
+        e_oracle = torch.ones(e.size()) * -99999
+        #e_oracle = torch.zeros(e.size()).to("cuda")
+        e_oracle.to("cuda")
         # for i in range(len(e_oracle)):
         #     e_oracle[i] = float(min(e[i]))
         for i, utt in enumerate(uttids):

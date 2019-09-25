@@ -16,6 +16,7 @@ from espnet.nets.e2e_asr_common import end_detect
 from espnet.nets.pytorch_backend.rnn.attentions import att_to_numpy
 from espnet.nets.pytorch_backend.rnn.attention_oracle import OracleAtt
 from espnet.nets.pytorch_backend.rnn.shloss import SinkhornDistance
+from geomloss import SamplesLoss
 
 from espnet.nets.pytorch_backend.nets_utils import append_ids
 from espnet.nets.pytorch_backend.nets_utils import get_last_yseq
@@ -95,7 +96,9 @@ class Decoder(torch.nn.Module):
         self.oracle = OracleAtt()
         self.epoch_store = epoch_store
         self.logzero = -10000000000.0
-        self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
+        #self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
+        self.sink_horn_loss = SamplesLoss(p=2, blur=0.01)
+
     def zero_state(self, hs_pad):
         return hs_pad.new_zeros(hs_pad.size(0), self.dunits)
 
@@ -207,7 +210,7 @@ class Decoder(torch.nn.Module):
         # atts_w = np.array([ele.detach().cpu().numpy() for ele in atts_w])
         atts_w = torch.stack(atts_w)
         atts_w_oracle = torch.stack(atts_w_oracle)
-        atts_w_oracle = F.softmax(atts_w_oracle, dim=2)
+        atts_w_oracle = F.softmax(2 * atts_w_oracle, dim=2)
         # self.plot_att(atts_w,atts_w_oracle,uttids, "att_w")
         # atts_w_oracle = np.swapaxes(atts_w_oracle, 0, 1)
         # atts_w = np.swapaxes(atts_w, 0, 1)
@@ -240,9 +243,11 @@ class Decoder(torch.nn.Module):
                                     reduction=reduction_str)
         # atts_w.requires_grad = True
         # atts_w_oracle.requires_grad = False
-        logging.info("atts_w requires grad? : " + str(atts_w.requires_grad) + str(atts_w.is_cuda))
-        logging.info("atts_w_oracle requires grad? : " + str(atts_w_oracle.requires_grad) + str(atts_w_oracle.is_cuda))
-        self.oracle_loss, _, _ = self.sink_horn_loss(atts_w, atts_w_oracle)
+        logging.info("atts_w requires grad? : " + str(atts_w.requires_grad) + str(atts_w.is_cuda) + str(atts_w.shape))
+        logging.info("atts_w_oracle requires grad? : " + str(atts_w_oracle.requires_grad) + str(atts_w_oracle.is_cuda) + str(atts_w_oracle.shape))
+        atts_w = atts_w.reshape(1, -1)
+        atts_w_oracle = atts_w_oracle.reshape(1, -1)
+        self.oracle_loss = self.sink_horn_loss(atts_w, atts_w_oracle)
         self.oracle_loss = torch.sum(self.oracle_loss)
         self.oracle_loss = to_device(self, self.oracle_loss)
         # self.oracle_loss *= (np.mean([len(x) for x in ys_in]) - 1)

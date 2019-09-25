@@ -185,6 +185,11 @@ class E2E(ASRInterface, torch.nn.Module):
         for l in six.moves.range(len(self.dec.decoder)):
             set_forget_bias_to_one(self.dec.decoder[l].bias_ih)
 
+    def get_oracle_w(self):
+        ep = self.epoch_store.get_epoch()
+        w = np.exp(-5 * int(ep)/20)
+        return w
+
     def forward(self, xs_pad, ilens, ys_pad, uttids):
         """E2E forward
 
@@ -293,6 +298,7 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_att_data = None
             loss_ctc_data = float(self.loss_ctc)
         else:
+            self.oracle_w = self.get_oracle_w()
             self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
             loss_att_data = float(self.loss_att)
             loss_ctc_data = float(self.loss_ctc)
