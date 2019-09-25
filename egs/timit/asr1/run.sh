@@ -46,7 +46,7 @@ set -o pipefail
 
 train_set=train_nodev
 train_dev=train_dev
-recog_set="train_nodev test"
+recog_set="test"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     local/timit_data_prep.sh ${timit} ${trans_type} || exit 1
