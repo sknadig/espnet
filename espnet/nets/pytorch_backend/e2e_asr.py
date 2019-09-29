@@ -298,7 +298,7 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_att_data = None
             loss_ctc_data = float(self.loss_ctc)
         else:
-            self.oracle_w = self.get_oracle_w()
+            #self.oracle_w = self.get_oracle_w()
             self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
             loss_att_data = float(self.loss_att)
             loss_ctc_data = float(self.loss_ctc)
