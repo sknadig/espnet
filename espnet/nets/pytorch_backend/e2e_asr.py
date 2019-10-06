@@ -529,6 +529,39 @@ class E2E(ASRInterface, torch.nn.Module):
 
         return att_ws
 
+    def calculate_all_context_vectors(self, xs_pad, ilens, ys_pad):
+        """E2E attention calculation
+
+        :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
+        :param torch.Tensor ilens: batch of lengths of input sequences (B)
+        :param torch.Tensor ys_pad: batch of padded character id sequence tensor (B, Lmax)
+        :return: attention weights with the following shape,
+            1) multi-head case => attention weights (B, H, Lmax, Tmax),
+            2) other case => attention weights (B, Lmax, Tmax).
+        :rtype: float ndarray
+        """
+        with torch.no_grad():
+            # 0. Frontend
+            if self.frontend is not None:
+                hs_pad, hlens, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
+                hs_pad, hlens = self.feature_transform(hs_pad, hlens)
+            else:
+                hs_pad, hlens = xs_pad, ilens
+
+            # 1. Encoder
+            if self.replace_sos:
+                tgt_lang_ids = ys_pad[:, 0:1]
+                ys_pad = ys_pad[:, 1:]  # remove target language ID in the beggining
+            else:
+                tgt_lang_ids = None
+            hpad, hlens, _ = self.enc(hs_pad, hlens)
+
+            # 2. Decoder
+            att_cs, labels = self.dec.calculate_all_context_vectors(hpad, hlens, ys_pad, tgt_lang_ids=tgt_lang_ids)
+
+        return att_cs, labels
+
+
     def subsample_frames(self, x):
         # subsample frame
         x = x[::self.subsample[0], :]

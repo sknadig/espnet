@@ -29,3 +29,5 @@ patience: 3
 
 # scheduled sampling option
 sampling-probability: 0.0
+
+# visualize-context-vectors: True

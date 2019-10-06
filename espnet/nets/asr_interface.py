@@ -92,6 +92,12 @@ class ASRInterface:
         from espnet.asr.asr_utils import PlotAttentionReport
         return PlotAttentionReport
 
+    @property
+    def context_vector_plot_class(self):
+        """Get attention plot class."""
+        from espnet.asr.asr_utils import PlotContextVectors
+        return PlotContextVectors
+
     def encode(self, feat):
         """Encode feature in `beam_search` (optional).
 

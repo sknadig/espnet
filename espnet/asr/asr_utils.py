@@ -77,6 +77,63 @@ class CompareValueTrigger(object):
         self._summary = chainer.reporter.DictSummary()
 
 
+class PlotContextVectors(extension.Extension):
+    """Plot attention reporter.
+
+    Args:
+        att_vis_fn (espnet.nets.*_backend.e2e_asr.E2E.calculate_all_attentions):
+            Function of attention visualization.
+        data (list[tuple(str, dict[str, list[Any]])]): List json utt key items.
+        outdir (str): Directory to save figures.
+        converter (espnet.asr.*_backend.asr.CustomConverter): Function to convert data.
+        device (int | torch.device): Device.
+        reverse (bool): If True, input and output length are reversed.
+        ikey (str): Key to access input (for ASR ikey="input", for MT ikey="output".)
+        iaxis (int): Dimension to access input (for ASR iaxis=0, for MT iaxis=1.)
+        okey (str): Key to access output (for ASR okey="input", MT okay="output".)
+
+    """
+
+    def __init__(self, context_vis_fn, data, outdir, converter, transform, device, reverse=False,
+                 ikey="input", iaxis=0, okey="output", oaxis=0, char_list = []):
+        self.context_vis_fn = context_vis_fn
+        self.data = copy.deepcopy(data)
+        self.outdir = outdir
+        self.converter = converter
+        self.transform = transform
+        self.device = device
+        self.reverse = reverse
+        self.ikey = ikey
+        self.iaxis = iaxis
+        self.okey = okey
+        self.oaxis = oaxis
+        self.char_list = char_list
+        if not os.path.exists(self.outdir):
+            os.makedirs(self.outdir)
+
+    def __call__(self, trainer):
+        """Plot and save image file of att_ws matrix."""
+        att_cs, labels = self.get_context_vectors()
+        phones = str(" ".join([self.char_list[ele] for ele in labels[:, 0]]))
+        logging.info("ATT_CS: " + str(att_cs.shape) + " " + str(labels.shape) + " " + str(phones))
+
+    def get_context_vectors(self):
+        """Return attention weights.
+
+        Returns:
+            numpy.ndarray: attention weights.float. Its shape would be
+                differ from backend.
+                * pytorch-> 1) multi-head case => (B, H, Lmax, Tmax), 2) other case => (B, Lmax, Tmax).
+                * chainer-> (B, Lmax, Tmax)
+
+        """
+        batch = self.converter([self.transform(self.data)], self.device)
+        if isinstance(batch, tuple):
+            att_cs, labels = self.context_vis_fn(*batch)
+        else:
+            att_cs, labels = self.context_vis_fn(**batch)
+        return att_cs, labels
+
 class PlotAttentionReport(extension.Extension):
     """Plot attention reporter.
 

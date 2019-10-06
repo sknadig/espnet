@@ -486,6 +486,21 @@ def train(args):
     else:
         att_reporter = None
 
+    att_c_data = sorted(list(valid_json.items()),
+                    key=lambda x: int(x[1]['input'][0]['shape'][1]), reverse=True)
+
+    if hasattr(model, "module"):
+        plot_class = model.module.context_vector_plot_class
+        context_vis_fn = model.module.calculate_all_context_vectors
+    else:
+        plot_class = model.context_vector_plot_class
+        context_vis_fn = model.calculate_all_context_vectors
+    
+    context_reporter = plot_class(
+        context_vis_fn, att_c_data, args.outdir + "/att_ws",
+        converter=converter, transform=load_cv, device=device, char_list=args.char_list)
+    trainer.extend(context_reporter, trigger=(1, 'epoch'))
+
     # Make a plot for training and validation values
     trainer.extend(extensions.PlotReport(['main/loss', 'validation/main/loss',
                                           'main/loss_ctc', 'validation/main/loss_ctc',

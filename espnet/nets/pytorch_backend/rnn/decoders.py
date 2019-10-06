@@ -657,6 +657,69 @@ class Decoder(torch.nn.Module, ScorerInterface):
         att_ws = att_to_numpy(att_ws, self.att[att_idx])
         return att_ws
 
+    def calculate_all_context_vectors(self, hs_pad, hlen, ys_pad, strm_idx=0, tgt_lang_ids=None):
+        """Calculate all of attentions
+
+            :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
+            :param torch.Tensor hlen: batch of lengths of hidden state sequences (B)
+            :param torch.Tensor ys_pad: batch of padded character id sequence tensor (B, Lmax)
+            :param int strm_idx: stream index for parallel speaker attention in multi-speaker case
+            :param torch.Tensor tgt_lang_ids: batch of target language id tensor (B, 1)
+            :return: attention weights with the following shape,
+                1) multi-head case => attention weights (B, H, Lmax, Tmax),
+                2) other case => attention weights (B, Lmax, Tmax).
+            :rtype: float ndarray
+        """
+        # TODO(kan-bayashi): need to make more smart way
+        ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
+        att_idx = min(strm_idx, len(self.att) - 1)
+
+        # hlen should be list of integer
+        hlen = list(map(int, hlen))
+
+        self.loss = None
+        # prepare input and output word sequences with sos/eos IDs
+        eos = ys[0].new([self.eos])
+        sos = ys[0].new([self.sos])
+        if self.replace_sos:
+            ys_in = [torch.cat([idx, y], dim=0) for idx, y in zip(tgt_lang_ids, ys)]
+        else:
+            ys_in = [torch.cat([sos, y], dim=0) for y in ys]
+        ys_out = [torch.cat([y, eos], dim=0) for y in ys]
+
+        # padding for ys with -1
+        # pys: utt x olen
+        ys_in_pad = pad_list(ys_in, self.eos)
+        ys_out_pad = pad_list(ys_out, self.ignore_id)
+
+        # get length info
+        olength = ys_out_pad.size(1)
+
+        # initialization
+        c_list = [self.zero_state(hs_pad)]
+        z_list = [self.zero_state(hs_pad)]
+        for _ in six.moves.range(1, self.dlayers):
+            c_list.append(self.zero_state(hs_pad))
+            z_list.append(self.zero_state(hs_pad))
+        att_w = None
+        att_cs = []
+        labels = []
+        self.att[att_idx].reset()  # reset pre-computation of h
+
+        # pre-computation of embedding
+        eys = self.dropout_emb(self.embed(ys_in_pad))  # utt x olen x zdim
+
+        # loop for an output sequence
+        for i in six.moves.range(olength):
+            att_c, att_w = self.att[att_idx](hs_pad, hlen, self.dropout_dec[0](z_list[0]), att_w)
+            ey = torch.cat((eys[:, i, :], att_c), dim=1)  # utt x (zdim + hdim)
+            z_list, c_list = self.rnn_forward(ey, z_list, c_list, z_list, c_list)
+            att_cs.append(att_c)
+            labels.append(ys_out_pad[:,i])
+        att_cs = torch.from_numpy(np.array([np.array(ele.cpu()) for ele in att_cs]))
+        labels = torch.from_numpy(np.array([np.array(ele.cpu()) for ele in labels]))
+        return att_cs, labels
+
     @staticmethod
     def _get_last_yseq(exp_yseq):
         last = []
