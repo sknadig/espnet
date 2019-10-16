@@ -140,6 +140,7 @@ class E2E(ASRInterface, torch.nn.Module):
         self.logzero = -10000000000.0
         self.loss = None
         self.acc = None
+        self.log_vars = torch.nn.Parameter(torch.zeros(3,1))
 
     def init_like_chainer(self):
         """Initialize weight like chainer
@@ -306,9 +307,17 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_att_data = None
             loss_ctc_data = float(self.loss_ctc)
         else:
-            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
+            #self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
+            self.loss = torch.exp(-1.0 * self.log_vars[0]) * self.loss_ctc + self.log_vars[0] + \
+            torch.exp(-1.0 * self.log_vars[1]) * self.loss_att + self.log_vars[1] + \
+            torch.exp(-1.0 * self.log_vars[2]) * self.loss_oracle + self.log_vars[2] 
+            self.loss = torch.mean(self.loss)
+
             loss_att_data = float(self.loss_att)
             loss_ctc_data = float(self.loss_ctc)
+
+        logging.info("WEIGHTS: " + str(self.log_vars[0]) + " " + str(self.log_vars[1]) + " " + str(self.log_vars[2]))
+
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
             self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data, loss_oracle_data)

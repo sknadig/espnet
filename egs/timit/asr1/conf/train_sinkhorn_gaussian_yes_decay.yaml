@@ -36,5 +36,5 @@ oracle-w: 1.0
 oracle-stop: 40
 
 oracle-w-decay: True
-alignment-type: impulse
-alignment-loss-type: cosine
+alignment-type: gaussian
+alignment-loss-type: sinkhorn
