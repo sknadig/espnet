@@ -73,7 +73,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # note that sos/eos IDs are identical
         self.sos = odim - 1
         self.eos = odim - 1
-        self.oracle_w = args.oracle_w
+        self.oracle_w_main = args.oracle_w
         # subsample info
         # +1 means input (+1) and layers outputs (args.elayer)
         subsample = np.ones(args.elayers + 1, dtype=np.int)
@@ -187,7 +187,7 @@ class E2E(ASRInterface, torch.nn.Module):
 
     def get_oracle_w(self):
         ep = self.epoch_store.get_epoch()
-        w = np.exp(-5 * int(ep)/20)
+        w = np.exp(-5 * int(ep)/40)
         return w
 
     def forward(self, xs_pad, ilens, ys_pad, uttids):
@@ -289,6 +289,9 @@ class E2E(ASRInterface, torch.nn.Module):
             cer = 0.0 if not self.report_cer else float(sum(char_eds)) / sum(char_ref_lens)
 
         alpha = self.mtlalpha
+        self.oracle_w = self.oracle_w_main * self.get_oracle_w()
+        loss_oracle_data = float(self.loss_oracle)
+
         if alpha == 0:
             self.loss = self.loss_att
             loss_att_data = float(self.loss_att)
@@ -298,11 +301,9 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_att_data = None
             loss_ctc_data = float(self.loss_ctc)
         else:
-            #self.oracle_w = self.get_oracle_w()
             self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
             loss_att_data = float(self.loss_att)
             loss_ctc_data = float(self.loss_ctc)
-            loss_oracle_data = float(self.loss_oracle)
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
             self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data, loss_oracle_data)

@@ -97,7 +97,9 @@ class Decoder(torch.nn.Module):
         self.epoch_store = epoch_store
         self.logzero = -10000000000.0
         #self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
-        self.sink_horn_loss = SamplesLoss(p=2, blur=0.01)
+        #self.alignment_loss = SamplesLoss(p=2, blur=0.01)
+        #self.alignment_loss = torch.nn.KLDivLoss()
+        self.alignment_loss = torch.nn.CosineSimilarity(dim=2)
 
     def zero_state(self, hs_pad):
         return hs_pad.new_zeros(hs_pad.size(0), self.dunits)
@@ -245,9 +247,9 @@ class Decoder(torch.nn.Module):
         # atts_w_oracle.requires_grad = False
         logging.info("atts_w requires grad? : " + str(atts_w.requires_grad) + str(atts_w.is_cuda) + str(atts_w.shape))
         logging.info("atts_w_oracle requires grad? : " + str(atts_w_oracle.requires_grad) + str(atts_w_oracle.is_cuda) + str(atts_w_oracle.shape))
-        atts_w = atts_w.reshape(1, -1)
-        atts_w_oracle = atts_w_oracle.reshape(1, -1)
-        self.oracle_loss = self.sink_horn_loss(atts_w, atts_w_oracle)
+        #atts_w = atts_w.reshape(1, -1)
+        #atts_w_oracle = atts_w_oracle.reshape(1, -1)
+        self.oracle_loss = 1 - self.alignment_loss(atts_w, atts_w_oracle)
         self.oracle_loss = torch.sum(self.oracle_loss)
         self.oracle_loss = to_device(self, self.oracle_loss)
         # self.oracle_loss *= (np.mean([len(x) for x in ys_in]) - 1)
