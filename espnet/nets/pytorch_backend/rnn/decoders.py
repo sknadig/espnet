@@ -53,7 +53,7 @@ class Decoder(torch.nn.Module):
     :param float dropout: dropout rate
     """
 
-    def __init__(self, eprojs, odim, dtype, dlayers, dunits, sos, eos, att, verbose=0,
+    def __init__(self, args, eprojs, odim, dtype, dlayers, dunits, sos, eos, att, verbose=0,
                  char_list=None, labeldist=None, lsm_weight=0., sampling_probability=0.0,
                  dropout=0.0, epoch_store=None):
         super(Decoder, self).__init__()
@@ -93,13 +93,22 @@ class Decoder(torch.nn.Module):
         self.lsm_weight = lsm_weight
         self.sampling_probability = sampling_probability
         self.dropout = dropout
-        self.oracle = OracleAtt()
+        self.oracle = OracleAtt(args.alignment_type)
         self.epoch_store = epoch_store
         self.logzero = -10000000000.0
+        self.oracle_stop = int(args.oracle_stop)
+        self.alignment_loss_type = args.alignment_loss_type
         #self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
-        #self.alignment_loss = SamplesLoss(p=2, blur=0.01)
-        #self.alignment_loss = torch.nn.KLDivLoss()
-        self.alignment_loss = torch.nn.CosineSimilarity(dim=2)
+        if(self.alignment_loss_type == "sinkhorn"):
+            self.alignment_loss = SamplesLoss(p=2, blur=0.01)
+        elif(self.alignment_loss_type == "kld"):
+            self.alignment_loss = torch.nn.KLDivLoss()
+        elif(self.alignment_loss_type == "cosine"):
+            self.alignment_loss = torch.nn.CosineSimilarity(dim=2)
+        else:
+            logging.info("ERROR! Please define a correct alignment loss type")
+            exit()
+        logging.info("Using alignment loss type: " + str(self.alignment_loss_type) + " " + str(self.alignment_loss))
 
     def zero_state(self, hs_pad):
         return hs_pad.new_zeros(hs_pad.size(0), self.dunits)
@@ -188,7 +197,7 @@ class Decoder(torch.nn.Module):
             att_c, att_w = self.att[att_idx](hs_pad, hlens, self.dropout_dec[0](z_list[0]), att_w)
             ep = self.epoch_store.get_epoch()
             att_w_oracle = att_w
-            if(uttids is not None and ep < 20):
+            if(uttids is not None and ep < self.oracle_stop):
                 logging.info("ORACLE UPDATE: epoch {0}, so updating with ORACLE loss".format(str(ep)))
                 att_w_oracle = self.oracle(att_w, uttids, i)
                 att_w_oracle = to_device(self, att_w_oracle)
@@ -710,6 +719,6 @@ class Decoder(torch.nn.Module):
 
 
 def decoder_for(args, odim, sos, eos, att, labeldist, epoch_store=None):
-    return Decoder(args.eprojs, odim, args.dtype, args.dlayers, args.dunits, sos, eos, att, args.verbose,
+    return Decoder(args, args.eprojs, odim, args.dtype, args.dlayers, args.dunits, sos, eos, att, args.verbose,
                    args.char_list, labeldist,
                    args.lsm_weight, args.sampling_probability, args.dropout_rate_decoder, epoch_store)

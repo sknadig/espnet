@@ -69,6 +69,8 @@ class E2E(ASRInterface, torch.nn.Module):
         self.blank = args.sym_blank
         self.reporter = Reporter()
         self.epoch_store = epoch_store
+        self.oracle_decay = int(args.oracle_w_decay)
+        logging.info("Doing ORACLE loss decay? : " + str(self.oracle_decay))
         # below means the last number becomes eos/sos ID
         # note that sos/eos IDs are identical
         self.sos = odim - 1
@@ -186,8 +188,11 @@ class E2E(ASRInterface, torch.nn.Module):
             set_forget_bias_to_one(self.dec.decoder[l].bias_ih)
 
     def get_oracle_w(self):
-        ep = self.epoch_store.get_epoch()
-        w = np.exp(-5 * int(ep)/40)
+        if(self.oracle_decay):
+            ep = self.epoch_store.get_epoch()
+            w = np.exp(-5 * int(ep)/40)
+        else:
+            w = float(1)
         return w
 
     def forward(self, xs_pad, ilens, ys_pad, uttids):
