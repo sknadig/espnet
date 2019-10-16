@@ -1,6 +1,12 @@
-# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "oracle_loss_add_3l" --train_config ./conf/train_oracle_add_3l.yaml --verbose 2
-# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "oracle_loss_dot_3l" --train_config ./conf/train_oracle_dot_3l.yaml --verbose 2
-./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "oracle_loss_loc_3l" --train_config ./conf/train_oracle_loc_3l.yaml --verbose 2
-# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "no_oracle_loss_add_3l" --train_config ./conf/train_no_oracle_add_3l.yaml --verbose 2
-# ./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "no_oracle_loss_dot_3l" --train_config ./conf/train_no_oracle_dot_3l.yaml --verbose 2
-./run.sh --ngpu 1 --timit /home/neo/MS/TIMIT_kaldi --trans_type phn --stage 3 --tag "no_oracle_loss_loc_3l" --train_config ./conf/train_no_oracle_loc_3l.yaml --verbose 2
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_cosine_gaussian_no_decay --tag train_cosine_gaussian_no_decay
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_cosine_gaussian_yes_decay --tag train_cosine_gaussian_yes_decay
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_cosine_impulse_no_decay --tag train_cosine_impulse_no_decay
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_cosine_impulse_yes_decay --tag train_cosine_impulse_yes_decay
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_cosine_square_no_decay --tag train_cosine_square_no_decay
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_cosine_square_yes_decay --tag train_cosine_square_yes_decay
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_kld_gaussian --tag train_kld_gaussian
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_kld_impulse --tag train_kld_impulse
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_kld_square --tag train_kld_square
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_sinkhorn_gaussian --tag train_sinkhorn_gaussian
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_sinkhorn_impulse --tag train_sinkhorn_impulse
+CUDA_VISIBLE_DEVICES=1 ./run.sh --ngpu 1 --trans_type phn --stage 3 --train_config conf/train_sinkhorn_square --tag train_sinkhorn_square
