@@ -1,0 +1,12 @@
+cp conf/base.yaml conf/train_kld_square.yaml
+cp conf/base.yaml conf/train_kld_impulse.yaml
+cp conf/base.yaml conf/train_kld_gaussian.yaml
+cp conf/base.yaml conf/train_cosine_square_no_decay.yaml
+cp conf/base.yaml conf/train_cosine_impulse_no_decay.yaml
+cp conf/base.yaml conf/train_cosine_gaussian_no_decay.yaml
+cp conf/base.yaml conf/train_cosine_square_yes_decay.yaml
+cp conf/base.yaml conf/train_cosine_impulse_yes_decay.yaml
+cp conf/base.yaml conf/train_cosine_gaussian_yes_decay.yaml
+cp conf/base.yaml conf/train_sinkhorn_square.yaml
+cp conf/base.yaml conf/train_sinkhorn_impulse.yaml
+cp conf/base.yaml conf/train_sinkhorn_gaussian.yaml
