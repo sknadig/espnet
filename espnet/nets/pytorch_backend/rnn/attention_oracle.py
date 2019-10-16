@@ -17,6 +17,10 @@ class OracleAtt(torch.nn.Module):
     def __init__(self):
         super(OracleAtt, self).__init__()
         self.frame_dict = pickle.load(open("/home/shree/espnet/egs/timit/asr1/frame_level_dict.pkl", "rb"))
+
+    def gaussian(self, x, mu, sig):
+        return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
     def __call__(self, e, uttids, output_index):
         # logging.info("Normal e size: " + str(e.size()))
         e_oracle = torch.ones(e.size()) * -99999
@@ -24,6 +28,8 @@ class OracleAtt(torch.nn.Module):
         e_oracle.to("cuda")
         # for i in range(len(e_oracle)):
         #     e_oracle[i] = float(min(e[i]))
+        logging.info(str(e.size()))
+        logging.info(str(uttids))
         for i, utt in enumerate(uttids):
             att_frames = self.frame_dict[utt]
             # logging.info("ORACLE for {utt} is {frames}".format(utt=utt, frames=att_frames))
@@ -31,6 +37,12 @@ class OracleAtt(torch.nn.Module):
                 curr_att_frames = att_frames[output_index]
                 # e_    oracle[i] = float(min(e[i]))
                 e_oracle[i][curr_att_frames[0]:curr_att_frames[1]] = float(1)
+                #indices = np.arange(curr_att_frames[0], curr_att_frames[1])
+                #center = (curr_att_frames[0]+curr_att_frames[1])//2
+                #if(center == curr_att_frames[1]):
+                #    center = center-1
+                #e_oracle[i][curr_att_frames[0]:curr_att_frames[1]] = torch.tensor(self.gaussian(indices, center, 1))
+                #e_oracle[i][center] = float(1)
             else:
                 e_oracle[i] = e[i]
             # logging.info("Min e[{0}] is {1}".format(str(i), str(min(e[i]))))
