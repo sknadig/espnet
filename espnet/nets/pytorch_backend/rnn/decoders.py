@@ -100,7 +100,7 @@ class Decoder(torch.nn.Module):
         self.alignment_loss_type = args.alignment_loss_type
         #self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
         if(self.alignment_loss_type == "sinkhorn"):
-            self.alignment_loss = SamplesLoss(p=2, blur=0.01)
+            self.alignment_loss = SamplesLoss(p=2, blur=0.01) 
         elif(self.alignment_loss_type == "kld"):
             self.alignment_loss = torch.nn.KLDivLoss()
         elif(self.alignment_loss_type == "cosine"):
@@ -256,9 +256,18 @@ class Decoder(torch.nn.Module):
         # atts_w_oracle.requires_grad = False
         logging.info("atts_w requires grad? : " + str(atts_w.requires_grad) + str(atts_w.is_cuda) + str(atts_w.shape))
         logging.info("atts_w_oracle requires grad? : " + str(atts_w_oracle.requires_grad) + str(atts_w_oracle.is_cuda) + str(atts_w_oracle.shape))
-        #atts_w = atts_w.reshape(1, -1)
-        #atts_w_oracle = atts_w_oracle.reshape(1, -1)
-        self.oracle_loss = 1 - self.alignment_loss(atts_w, atts_w_oracle)
+        
+
+        if(self.alignment_loss_type == "cosine"):
+            self.oracle_loss = self.alignment_loss(atts_w, atts_w_oracle)
+            self.oracle_loss = 1 - self.oracle_loss
+        elif(self.alignment_loss_type == "sinkhorn"):
+            atts_w = atts_w.reshape(1, -1)
+            atts_w_oracle = atts_w_oracle.reshape(1, -1)
+            self.oracle_loss = self.alignment_loss(atts_w, atts_w_oracle) 
+        elif(self.alignment_loss_type == "kld"):
+            self.oracle_loss = self.alignment_loss(torch.log(F.softmax(atts_w, dim=2)), F.softmax(atts_w_oracle, dim=2))
+
         self.oracle_loss = torch.sum(self.oracle_loss)
         self.oracle_loss = to_device(self, self.oracle_loss)
         # self.oracle_loss *= (np.mean([len(x) for x in ys_in]) - 1)

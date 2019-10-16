@@ -32,3 +32,6 @@ sampling-probability: 0.1
 
 dropout-rate: 0.1
 
+oracle-w: 1.0
+oracle-stop: 40
+
