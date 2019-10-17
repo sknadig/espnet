@@ -32,9 +32,9 @@ sampling-probability: 0.1
 
 dropout-rate: 0.1
 
-oracle-w: 1.0
+oracle-w: 0.0
 oracle-stop: 40
 
-oracle-w-decay: True
+oracle-w-decay: False
 alignment-type: impulse
-alignment-loss-type: sinkhorn
+alignment-loss-type: kld

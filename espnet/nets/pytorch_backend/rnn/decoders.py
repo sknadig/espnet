@@ -264,9 +264,9 @@ class Decoder(torch.nn.Module):
         elif(self.alignment_loss_type == "sinkhorn"):
             atts_w = atts_w.reshape(1, -1)
             atts_w_oracle = atts_w_oracle.reshape(1, -1)
-            self.oracle_loss = self.alignment_loss(atts_w, atts_w_oracle) 
+            self.oracle_loss = self.alignment_loss(atts_w, atts_w_oracle) / 0.5
         elif(self.alignment_loss_type == "kld"):
-            self.oracle_loss = self.alignment_loss(torch.log(F.softmax(atts_w, dim=2)), F.softmax(atts_w_oracle, dim=2))
+            self.oracle_loss = self.alignment_loss(torch.log(F.softmax(atts_w, dim=2)), F.softmax(atts_w_oracle, dim=2)) / 10**-7
 
         self.oracle_loss = torch.sum(self.oracle_loss)
         self.oracle_loss = to_device(self, self.oracle_loss)
