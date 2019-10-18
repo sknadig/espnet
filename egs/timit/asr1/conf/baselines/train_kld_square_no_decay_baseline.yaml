@@ -1,7 +1,7 @@
 # network architecture
 # encoder related
 etype: blstmp     # encoder architecture type
-elayers: 1
+elayers: 3
 eunits: 320
 eprojs: 320
 subsample: "1_1_1_1_1" # skip every n frame from input to nth layers

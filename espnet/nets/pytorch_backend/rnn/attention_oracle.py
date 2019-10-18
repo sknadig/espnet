@@ -16,7 +16,7 @@ from matplotlib import gridspec
 class OracleAtt(torch.nn.Module):
     def __init__(self, alignment_type="square"):
         super(OracleAtt, self).__init__()
-        self.frame_dict = pickle.load(open("/home/shree/espnet/egs/timit/asr1/frame_level_dict.pkl", "rb"))
+        self.frame_dict = pickle.load(open("/home/shree/espnet/egs/timit/asr1/frame_level_fa.pkl", "rb"))
         self.alignment_type = alignment_type
         logging.info("Using alignment type: " + str(alignment_type))
 
