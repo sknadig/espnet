@@ -310,7 +310,7 @@ class E2E(ASRInterface, torch.nn.Module):
             self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
             #self.loss = torch.exp(-1.0 * self.log_vars[0]) * self.loss_ctc + self.log_vars[0] + \
             #torch.exp(-1.0 * self.log_vars[1]) * self.loss_att + self.log_vars[1] + \
-            #torch.exp(-1.0 * self.log_vars[2]) * self.loss_oracle + self.log_vars[2]
+            #torch.exp(-1.0 * self.log_vars[2]) * self.loss_oracle * self.oracle_w_main + self.log_vars[2] * self.oracle_w_main
             #self.loss = torch.mean(self.loss)
 
             loss_att_data = float(self.loss_att)

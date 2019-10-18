@@ -1,7 +1,7 @@
 # network architecture
 # encoder related
 etype: blstmp     # encoder architecture type
-elayers: 1
+elayers: 3
 eunits: 320
 eprojs: 320
 subsample: "1_1_1_1_1" # skip every n frame from input to nth layers
@@ -15,7 +15,7 @@ aconv-chans: 10
 aconv-filts: 100
 
 # hybrid CTC/attention
-mtlalpha: 0.0
+mtlalpha: 0.5
 
 # minibatch related
 batch-size: 10
@@ -32,7 +32,7 @@ sampling-probability: 0.1
 
 dropout-rate: 0.1
 
-oracle-w: 1.0
+oracle-w: 0.0
 oracle-stop: 40
 
 oracle-w-decay: False
