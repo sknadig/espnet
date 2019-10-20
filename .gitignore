@@ -41,3 +41,4 @@ tools/swig/
 tools/warp-ctc/
 tools/*.done
 tools/PESQ*
+egs/librispeech/asr1/frame_level_fa2.pkl

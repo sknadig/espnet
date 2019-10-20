@@ -307,16 +307,16 @@ class E2E(ASRInterface, torch.nn.Module):
             loss_att_data = None
             loss_ctc_data = float(self.loss_ctc)
         else:
-            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
-            #self.loss = torch.exp(-1.0 * self.log_vars[0]) * self.loss_ctc + self.log_vars[0] + \
-            #torch.exp(-1.0 * self.log_vars[1]) * self.loss_att + self.log_vars[1] + \
-            #torch.exp(-1.0 * self.log_vars[2]) * self.loss_oracle * self.oracle_w_main + self.log_vars[2] * self.oracle_w_main
-            #self.loss = torch.mean(self.loss)
+            #self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att + self.loss_oracle * self.oracle_w
+            self.loss = torch.exp(-1.0 * self.log_vars[0]) * self.loss_ctc + self.log_vars[0] + \
+            torch.exp(-1.0 * self.log_vars[1]) * self.loss_att + self.log_vars[1] + \
+            torch.exp(-1.0 * self.log_vars[2]) * self.loss_oracle * self.oracle_w_main + self.log_vars[2] * self.oracle_w_main
+            self.loss = torch.mean(self.loss)
 
             loss_att_data = float(self.loss_att)
             loss_ctc_data = float(self.loss_ctc)
 
-        #logging.info("WEIGHTS: " + str(self.log_vars[0]) + " " + str(self.log_vars[1]) + " " + str(self.log_vars[2]))
+        logging.info("WEIGHTS: " + str(self.log_vars[0]) + " " + str(self.log_vars[1]) + " " + str(self.log_vars[2]))
 
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):

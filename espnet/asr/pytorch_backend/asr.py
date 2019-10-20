@@ -392,7 +392,11 @@ def train(args):
         att_reporter = plot_class(
             att_vis_fn, data, args.outdir + "/att_ws",
             converter=converter, transform=load_cv, device=device)
+        att_reporter_iter = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws_iter",
+            converter=converter, transform=load_cv, device=device)
         trainer.extend(att_reporter, trigger=(1, 'epoch'))
+        trainer.extend(att_reporter_iter, trigger=(1, 'iteration'))
     else:
         att_reporter = None
 
