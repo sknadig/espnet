@@ -231,8 +231,8 @@ class Decoder(torch.nn.Module):
         #     self.plot_att(atts_w_oracle[i],uttids[i], "oracle_{0}".format(str(i)))
         #     self.plot_att(atts_w[i],atts_w_oracle[i],uttids[i], "att_w_{0}".format(str(i)))
         
-        # logging.info("Normal att_w shape: " + str(atts_w.shape))
-        # logging.info("ORACLE att_w shape: " + str(atts_w_oracle.size()))
+        logging.info("Normal att_w shape: " + str(atts_w.size()))
+        logging.info("ORACLE att_w shape: " + str(atts_w_oracle.size()))
 
         # atts_w_oracle = to_device(self, torch.from_numpy(atts_w_oracle))
         # atts_w = to_device(self, torch.from_numpy(atts_w))

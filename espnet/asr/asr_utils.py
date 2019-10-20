@@ -101,6 +101,7 @@ class PlotAttentionReport(extension.Extension):
             filename = "%s/%s.ep.{.updater.epoch}.png" % (
                 self.outdir, self.data[idx][0])
             att_w = self.get_attention_weight(idx, att_w)
+            logging.info("VIZ DEBUG: " + str(att_w.shape))
             self._plot_and_save_attention(att_w, filename.format(trainer))
 
     def log_attentions(self, logger, step):

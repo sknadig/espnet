@@ -209,17 +209,17 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: accuracy in attention decoder
         :rtype: float
         """
-        # logging.info("e2e_asr uttids are : " + str(uttids))
+        logging.info("e2e_asr uttids are : " + str(uttids))
         # 0. Frontend
         if self.frontend is not None:
             hs_pad, hlens, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
             hs_pad, hlens = self.feature_transform(hs_pad, hlens)
         else:
             hs_pad, hlens = xs_pad, ilens
-        # logging.info("e2e_asr xs_pad shape: " + str(hs_pad.size()))
+        logging.info("Encoder input shape: " + str(hs_pad.size()))
         # 1. Encoder
         hs_pad, hlens, _ = self.enc(hs_pad, hlens)
-
+        logging.info("Encoder output shape: " + str(hs_pad.size()))
         # 2. CTC loss
         if self.mtlalpha == 0:
             self.loss_ctc = None
