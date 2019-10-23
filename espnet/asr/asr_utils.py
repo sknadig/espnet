@@ -134,6 +134,19 @@ class PlotContextVectors(extension.Extension):
             att_cs, labels = self.context_vis_fn(**batch)
         return att_cs, labels
 
+    def log_attentions(self, logger, step):
+        """Add image files of att_ws matrix to the tensorboard."""
+        att_cs, labels = self.get_context_vectors()
+        att_cs = att_cs.view(-1, att_cs.size(2))
+        labels = labels.view(-1)
+        non_eos_ids = labels != -1
+        non_space_ids = labels != 2
+        non_sos_ids = labels != 41
+        valid_ids = non_eos_ids & non_space_ids & non_sos_ids
+        labels = [self.char_list[ele] for ele in labels[valid_ids]]
+        label_img = torch.rand(len(labels), 3, 1, 1)
+        logger.add_embedding(att_cs[valid_ids], metadata=labels, label_img=label_img, global_step=step)
+
 class PlotAttentionReport(extension.Extension):
     """Plot attention reporter.
 

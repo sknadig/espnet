@@ -499,7 +499,7 @@ def train(args):
     context_reporter = plot_class(
         context_vis_fn, att_c_data, args.outdir + "/att_ws",
         converter=converter, transform=load_cv, device=device, char_list=args.char_list)
-    trainer.extend(context_reporter, trigger=(1, 'epoch'))
+    # trainer.extend(context_reporter, trigger=(1, 'epoch'))
 
     # Make a plot for training and validation values
     trainer.extend(extensions.PlotReport(['main/loss', 'validation/main/loss',
@@ -564,7 +564,7 @@ def train(args):
     set_early_stop(trainer, args)
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
-        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter),
+        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter, context_reporter),
                        trigger=(args.report_interval_iters, "iteration"))
     # Run the training
     trainer.run()

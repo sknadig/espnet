@@ -6,7 +6,7 @@ class TensorboardLogger(Extension):
 
     default_name = "espnet_tensorboard_logger"
 
-    def __init__(self, logger, att_reporter=None, entries=None, epoch=0):
+    def __init__(self, logger, att_reporter=None, context_reporter=None, entries=None, epoch=0):
         """Init the extension
 
         :param SummaryWriter logger: The logger to use
@@ -16,6 +16,7 @@ class TensorboardLogger(Extension):
         """
         self._entries = entries
         self._att_reporter = att_reporter
+        self._context_reporter = context_reporter
         self._logger = logger
         self._epoch = epoch
 
@@ -34,6 +35,10 @@ class TensorboardLogger(Extension):
                 if 'cupy' in str(type(k)):
                     k = k.get()
                 self._logger.add_scalar(k, v, trainer.updater.iteration)
+
+        
         if self._att_reporter is not None and trainer.updater.get_iterator('main').epoch > self._epoch:
             self._epoch = trainer.updater.get_iterator('main').epoch
             self._att_reporter.log_attentions(self._logger, trainer.updater.iteration)
+            self._context_reporter.log_attentions(self._logger, trainer.updater.iteration)
+            
