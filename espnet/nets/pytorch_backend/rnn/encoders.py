@@ -12,6 +12,59 @@ from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import to_device
 
 
+class No_enc(torch.nn.Module):
+    """RNN module
+
+    :param int idim: dimension of inputs
+    :param int elayers: number of encoder layers
+    :param int cdim: number of rnn units (resulted in cdim * 2 if bidirectional)
+    :param int hdim: number of final projection units
+    :param float dropout: dropout rate
+    :param str typ: The RNN type
+    """
+
+    def __init__(self):
+        super(No_enc, self).__init__()
+        
+    def forward(self, xs_pad, ilens, prev_state=None):
+        logging.info("No Encoder!")
+        xs_pack = pack_padded_sequence(xs_pad, ilens, batch_first=True)
+        ys_pad, ilens = pad_packed_sequence(xs_pack, batch_first=True)
+        return xs_pad, ilens, None  # x: utt list of frame x dim
+
+class DNN_enc(torch.nn.Module):
+    """RNN module
+
+    :param int idim: dimension of inputs
+    :param int elayers: number of encoder layers
+    :param int cdim: number of rnn units (resulted in cdim * 2 if bidirectional)
+    :param int hdim: number of final projection units
+    :param float dropout: dropout rate
+    :param str typ: The RNN type
+    """
+
+    def __init__(self, idim, elayers, eunits, eprojs, subsample, dropout):
+        super(DNN_enc, self).__init__()
+        self.l1 = torch.nn.Linear(idim, eprojs)
+        self.l2 = torch.nn.Linear(eprojs, eprojs)
+        self.l3 = torch.nn.Linear(eprojs, eprojs)
+        self.l4 = torch.nn.Linear(eprojs, eprojs)
+        self.l5 = torch.nn.Linear(eprojs, eprojs)
+
+    def forward(self, xs_pad, ilens, prev_state=None):
+        logging.info("No Encoder!")
+        xs_pack = pack_padded_sequence(xs_pad, ilens, batch_first=True)
+
+        xs_pad = self.l1(xs_pad)
+        xs_pad = self.l2(xs_pad)
+        xs_pad = self.l3(xs_pad)
+        xs_pad = self.l4(xs_pad)
+        xs_pad = self.l5(xs_pad)
+
+        ys_pad, ilens = pad_packed_sequence(xs_pack, batch_first=True)
+        return xs_pad, ilens, None  # x: utt list of frame x dim
+
+
 class RNNP(torch.nn.Module):
     """RNN with projection layer module
 
