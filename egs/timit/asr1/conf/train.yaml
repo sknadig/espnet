@@ -1,6 +1,6 @@
 # network architecture
 # encoder related
-etype: blstmp     # encoder architecture type
+etype: dnn   # encoder architecture type
 elayers: 4
 eunits: 320
 eprojs: 320
