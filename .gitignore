@@ -57,3 +57,4 @@ tools/PESQ*
 tools/hts_engine_API*
 tools/open_jtalk*
 tools/pyopenjtalk*
+egs/librispeech/asr1/fbank.zip

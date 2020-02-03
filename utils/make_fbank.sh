@@ -4,7 +4,7 @@
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 # Begin configuration section.
-nj=4
+nj=1
 fs=22050
 fmax=
 fmin=
