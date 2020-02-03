@@ -1,25 +1,34 @@
-# This configuration requires 4 gpus with 12GB memory
-accum-grad: 4
-adim: 512
-aheads: 8
-backend: pytorch
-batch-bins: 15000000
-dlayers: 6
-dropout-rate: 0.1
-dunits: 2048
-elayers: 12
-epochs: 120
-eunits: 2048
-grad-clip: 5
-lsm-weight: 0.1
-model-module: espnet.nets.pytorch_backend.e2e_asr_transformer:E2E
-mtlalpha: 0.3
-opt: noam
-patience: 0
+# network architecture
+# encoder related
+etype: bgrup     # encoder architecture type
+elayers: 3
+eunits: 128
+eprojs: 128
+subsample: "1_2_2_1_1" # skip every n frame from input to nth layers
+# decoder related
+dlayers: 1
+dunits: 256
+# attention related
+atype: location
+adim: 256
+aconv-chans: 10
+aconv-filts: 100
+
+# hybrid CTC/attention
+mtlalpha: 0.5
+
+# minibatch related
+batch-size: 10
+maxlen-in: 800  # if input length  > maxlen_in, batchsize is automatically reduced
+maxlen-out: 150 # if output length > maxlen_out, batchsize is automatically reduced
 sortagrad: 0
-transformer-attn-dropout-rate: 0.0
-transformer-init: pytorch
-transformer-input-layer: conv2d
-transformer-length-normalized-loss: false
-transformer-lr: 10.0
-transformer-warmup-steps: 25000
+
+# optimization related
+opt: adadelta
+epochs: 40
+patience: 3
+
+# scheduled sampling option
+sampling-probability: 1.0
+dropout-rate: 0.2
+dropout-rate-decoder: 0.1

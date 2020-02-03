@@ -9,7 +9,7 @@ subsample: "1_2_2_1_1" # skip every n frame from input to nth layers
 dlayers: 1
 dunits: 300
 # attention related
-atype: location
+atype: dot
 adim: 320
 aconv-chans: 10
 aconv-filts: 100
@@ -21,11 +21,14 @@ mtlalpha: 0.5
 batch-size: 30
 maxlen-in: 800  # if input length  > maxlen_in, batchsize is automatically reduced
 maxlen-out: 150 # if output length > maxlen_out, batchsize is automatically reduced
+sortagrad: 10
 
 # optimization related
 opt: adadelta
-epochs: 20
+epochs: 40
 patience: 3
 
 # scheduled sampling option
-sampling-probability: 0.0
+sampling-probability: 0.3
+dropout-rate: 0.2
+dropout-rate-decoder: 0.1

@@ -62,8 +62,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     fbankdir=fbank
     # Generate the fbank features; by default 80-dimensional fbanks with pitch on each frame
     for x in test train dev; do
-        steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 8 --write_utt2num_frames true \
-        data/${x} exp/make_fbank/${x} ${fbankdir}
+        /root/espnet/utils/make_fbank.sh --cmd "$train_cmd" --nj 8 --write_utt2num_frames true --fs 16000 --nj 32 --fmin 20 --n-mels 80 --n-fft 512 --n-shift 160 --win-length 400 data/${x} exp/make_fbank/${x} ${fbankdir}
     done
 
     # make a dev set
