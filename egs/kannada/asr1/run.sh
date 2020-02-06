@@ -45,10 +45,10 @@ use_lm_valbest_average=false # if true, the validation `lm_n_average`-best langu
 # Set this to somewhere where you want to put your data, or where
 # someone else has already put it.  You'll want to change this
 # if you're not on the CLSP grid.
-datadir=/export/a15/vpanayotov/data
+datadir=downloads
 
 # base url for downloads.
-data_url=www.openslr.org/resources/12
+data_url=www.openslr.org/resources/79
 
 # bpemode (unigram or bpe)
 nbpe=5000
@@ -71,9 +71,7 @@ recog_set="test_clean test_other dev_clean dev_other"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     echo "stage -1: Data Download"
-    for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360 train-other-500; do
-        local/download_and_untar.sh ${datadir} ${data_url} ${part}
-    done
+    local/download_and_untar.sh ${datadir} ${data_url}
 fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
@@ -82,11 +80,6 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
     echo "stage 0: Data preparation"
     for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360 train-other-500; do
         # use underscore-separated names in data directories.
-        # sed -i "s/[-?.,:;\/)(\_\'\`\"]//g" input3.txt
-        # sed -i "s/letteren//g" input3.txt
-        # sed -i "s/letter//g" input3.txt
-        # sed -i "s/x/ /g" input3.txt
-
         local/data_prep.sh ${datadir}/LibriSpeech/${part} data/${part//-/_}
     done
 fi
@@ -139,9 +132,6 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     done
 fi
 
-# spm_train --input=input.txt --vocab_size=700 --model_type="unigram" --model_prefix="data/lang_char/bpe_model" --input_sentence_size=100000000 --user_defined_symbols="ಅ,ಆ,ಇ,ಈ,ಉ,ಊ,ಋ,ಎ,ಏ,ಐ,ಒ,ಓ,ಔ,ಅಂ,ಅಃ,ಕ,ಕಾ,ಕಿ,ಕೀ,ಕು,ಕೂ,ಕೃ,ಕೆ,ಕೇ,ಕೈ,ಕೊ,ಕೋ,ಕೌ,ಕಂ,ಕಃ,ಕ್,ಖ,ಖಾ,ಖಿ,ಖೀ,ಖು,ಖೂ,ಖೃ,ಖೆ,ಖೇ,ಖೈ,ಖೊ,ಖೋ,ಖೌ,ಖಂ,ಖಃ,ಖ್,ಗ,ಗಾ,ಗಿ,ಗೀ,ಗು,ಗೂ,ಗೃ,ಗೆ,ಗೇ,ಗೈ,ಗೊ,ಗೋ,ಗೌ,ಗಂ,ಗಃ,ಗ್,ಘ,ಘಾ,ಘಿ,ಘೀ,ಘು,ಘೂ,ಘೃ,ಘೆ,ಘೇ,ಘೈ,ಘೊ,ಘೋ,ಘೌ,ಘಂ,ಘಃ,ಘ್,ಙ,ಙಾ,ಙಿ,ಙೀ,ಙು,ಙೂ,ಙೃ,ಙೆ,ಙೇ,ಙೈ,ಙೊ,ಙೋ,ಙೌ,ಙಂ,ಙಃ,ಙ್,ಚ,ಚಾ,ಚಿ,ಚೀ,ಚು,ಚೂ,ಚೃ,ಚೆ,ಚೇ,ಚೈ,ಚೊ,ಚೋ,ಚೌ,ಚಂ,ಚಃ,ಚ್,ಛ,ಛಾ,ಛಿ,ಛೀ,ಛು,ಛೂ,ಛೃ,ಛೆ,ಛೇ,ಛೈ,ಛೊ,ಛೋ,ಛೌ,ಛಂ,ಛಃ,ಛ್,ಜ,ಜಾ,ಜಿ,ಜೀ,ಜು,ಜೂ,ಜೃ,ಜೆ,ಜೇ,ಜೈ,ಜೊ,ಜೋ,ಜೌ,ಜಂ,ಜಃ,ಜ್,ಝ,ಝಾ,ಝಿ,ಝೀ,ಝು,ಝೂ,ಝೃ,ಝೆ,ಝೇ,ಝೈ,ಝೊ,ಝೋ,ಝೌ,ಝಂ,ಝಃ,ಝ್,ಞ,ಞಾ,ಞಿ,ಞೀ,ಞು,ಞೂ,ಞೃ,ಞೆ,ಞೇ,ಞೈ,ಞೊ,ಞೋ,ಞೌ,ಞಂ,ಞಃ,ಞ್,ಟ,ಟಾ,ಟಿ,ಟೀ,ಟು,ಟೂ,ಟೃ,ಟೆ,ಟೇ,ಟೈ,ಟೊ,ಟೋ,ಟೌ,ಟಂ,ಟಃ,ಟ್,ಠ,ಠಾ,ಠಿ,ಠೀ,ಠು,ಠೂ,ಠೃ,ಠೆ,ಠೇ,ಠೈ,ಠೊ,ಠೋ,ಠೌ,ಠಂ,ಠಃ,ಠ್,ಡ,ಡಾ,ಡಿ,ಡೀ,ಡು,ಡೂ,ಡೃ,ಡೆ,ಡೇ,ಡೈ,ಡೊ,ಡೋ,ಡೌ,ಡಂ,ಡಃ,ಡ್,ಢ,ಢಾ,ಢಿ,ಢೀ,ಢು,ಢೂ,ಢೃ,ಢೆ,ಢೇ,ಢೈ,ಢೊ,ಢೋ,ಢೌ,ಢಂ,ಢಃ,ಢ್,ಣ,ಣಾ,ಣಿ,ಣೀ,ಣು,ಣೂ,ಣೃ,ಣೆ,ಣೇ,ಣೈ,ಣೊ,ಣೋ,ಣೌ,ಣಂ,ಣಃ,ಣ್,ತ,ತಾ,ತಿ,ತೀ,ತು,ತೂ,ತೃ,ತೆ,ತೇ,ತೈ,ತೊ,ತೋ,ತೌ,ತಂ,ತಃ,ತ್,ಥ,ಥಾ,ಥಿ,ಥೀ,ಥು,ಥೂ,ಥೃ,ಥೆ,ಥೇ,ಥೈ,ಥೊ,ಥೋ,ಥೌ,ಥಂ,ಥಃ,ಥ್,ದ,ದಾ,ದಿ,ದೀ,ದು,ದೂ,ದೃ,ದೆ,ದೇ,ದೈ,ದೊ,ದೋ,ದೌ,ದಂ,ದಃ,ದ್,ಧ,ಧಾ,ಧಿ,ಧೀ,ಧು,ಧೂ,ಧೃ,ಧೆ,ಧೇ,ಧೈ,ಧೊ,ಧೋ,ಧೌ,ಧಂ,ಧಃ,ಧ್,ನ,ನಾ,ನಿ,ನೀ,ನು,ನೂ,ನೃ,ನೆ,ನೇ,ನೈ,ನೊ,ನೋ,ನೌ,ನಂ,ನಃ,ನ್,ಪ,ಪಾ,ಪಿ,ಪೀ,ಪು,ಪೂ,ಪೃ,ಪೆ,ಪೇ,ಪೈ,ಪೊ,ಪೋ,ಪೌ,ಪಂ,ಪಃ,ಪ್,ಫ,ಫಾ,ಫಿ,ಫೀ,ಫು,ಫೂ,ಫೃ,ಫೆ,ಫೇ,ಫೈ,ಫೊ,ಫೋ,ಫೌ,ಫಂ,ಫಃ,ಫ್,ಬ,ಬಾ,ಬಿ,ಬೀ,ಬು,ಬೂ,ಬೃ,ಬೆ,ಬೇ,ಬೈ,ಬೊ,ಬೋ,ಬೌ,ಬಂ,ಬಃ,ಬ್,ಭ,ಭಾ,ಭಿ,ಭೀ,ಭು,ಭೂ,ಭೃ,ಭೆ,ಭೇ,ಭೈ,ಭೊ,ಭೋ,ಭೌ,ಭಂ,ಭಃ,ಭ್,ಮ,ಮಾ,ಮಿ,ಮೀ,ಮು,ಮೂ,ಮೃ,ಮೆ,ಮೇ,ಮೈ,ಮೊ,ಮೋ,ಮೌ,ಮಂ,ಮಃ,ಮ್,ಯ,ಯಾ,ಯಿ,ಯೀ,ಯು,ಯೂ,ಯೃ,ಯೆ,ಯೇ,ಯೈ,ಯೊ,ಯೋ,ಯೌ,ಯಂ,ಯಃ,ಯ್,ರ,ರಾ,ರಿ,ರೀ,ರು,ರೂ,ರೃ,ರೆ,ರೇ,ರೈ,ರೊ,ರೋ,ರೌ,ರಂ,ರಃ,ರ್,ಱ,ಱಾ,ಱಿ,ಱೀ,ಱು,ಱೂ,ಱೃ,ಱೆ,ಱೇ,ಱೈ,ಱೊ,ಱೋ,ಱೌ,ಱಂ,ಱಃ,ಱ್,ಲ,ಲಾ,ಲಿ,ಲೀ,ಲು,ಲೂ,ಲೃ,ಲೆ,ಲೇ,ಲೈ,ಲೊ,ಲೋ,ಲೌ,ಲಂ,ಲಃ,ಲ್,ವ,ವಾ,ವಿ,ವೀ,ವು,ವೂ,ವೃ,ವೆ,ವೇ,ವೈ,ವೊ,ವೋ,ವೌ,ವಂ,ವಃ,ವ್,ಶ,ಶಾ,ಶಿ,ಶೀ,ಶು,ಶೂ,ಶೃ,ಶೆ,ಶೇ,ಶೈ,ಶೊ,ಶೋ,ಶೌ,ಶಂ,ಶಃ,ಶ್,ಷ,ಷಾ,ಷಿ,ಷೀ,ಷು,ಷೂ,ಷೃ,ಷೆ,ಷೇ,ಷೈ,ಷೊ,ಷೋ,ಷೌ,ಷಂ,ಷಃ,ಷ್,ಸ,ಸಾ,ಸಿ,ಸೀ,ಸು,ಸೂ,ಸೃ,ಸೆ,ಸೇ,ಸೈ,ಸೊ,ಸೋ,ಸೌ,ಸಂ,ಸಃ,ಸ್,ಹ,ಹಾ,ಹಿ,ಹೀ,ಹು,ಹೂ,ಹೃ,ಹೆ,ಹೇ,ಹೈ,ಹೊ,ಹೋ,ಹೌ,ಹಂ,ಹಃ,ಹ್,ಳ,ಳಾ,ಳಿ,ಳೀ,ಳು,ಳೂ,ಳೃ,ಳೆ,ಳೇ,ಳೈ,ಳೊ,ಳೋ,ಳೌ,ಳಂ,ಳಃ,ಳ್,ೞ,ೞಾ,ೞಿ,ೞೀ,ೞು,ೞೂ,ೞೃ,ೞೆ,ೞೇ,ೞೈ,ೞೊ,ೞೋ,ೞೌ,ೞಂ,ೞಃ,ೞ್"
-
-# spm_encode --model=data/lang_char/bpe_model.model --output_format=piece < input.txt | tr ' ' '\n' | sort | uniq | awk '{print $0 " " NR+1}' >> dict
 dict=data/lang_char/${train_set}_${bpemode}${nbpe}_units.txt
 bpemodel=data/lang_char/${train_set}_${bpemode}${nbpe}
 echo "dictionary: ${dict}"

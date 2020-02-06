@@ -367,6 +367,7 @@ class E2E(ASRInterface, torch.nn.Module):
         """Scorers."""
         return dict(decoder=self.dec, ctc=CTCPrefixScorer(self.ctc, self.eos))
 
+    @torch.jit.script_method
     def encode(self, x):
         """Encode acoustic features.
 
@@ -378,7 +379,7 @@ class E2E(ASRInterface, torch.nn.Module):
         ilens = [x.shape[0]]
 
         # subsample frame
-        x = x[::self.subsample[0], :]
+        # x = x[::self.subsample[0], :]
         p = next(self.parameters())
         h = torch.as_tensor(x, device=p.device, dtype=p.dtype)
         # make a utt list (1) to use the same interface for encoder

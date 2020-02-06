@@ -20,8 +20,8 @@ resume=        # Resume the training from snapshot
 # feature configuration
 do_delta=false
 
-train_config=conf/train.yaml
-decode_config=conf/decode.yaml
+train_config=conf/transducer/train_transducer.yaml
+decode_config=conf/transducer/decode_transducer.yaml
 
 # decoding parameter
 recog_model=model.acc.best # set a model to be used for decoding: 'model.acc.best' or 'model.loss.best'
