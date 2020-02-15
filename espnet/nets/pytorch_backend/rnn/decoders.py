@@ -899,9 +899,9 @@ class Decoder(torch.nn.Module, ScorerInterface):
         return logp, dict(c_prev=c_list[:], z_prev=z_list[:], a_prev=att_w, workspace=(att_idx, z_list, c_list))
 
 
-def decoder_for(args, odim, sos, eos, att, labeldist):
+def decoder_for(args, odim, sos, eos, att, labeldist, symbol_list):
     return Decoder(args.eprojs, odim, args.dtype, args.dlayers, args.dunits, sos, eos, att, args.verbose,
-                   args.char_list, labeldist,
+                   symbol_list, labeldist,
                    args.lsm_weight, args.sampling_probability, args.dropout_rate_decoder,
                    getattr(args, "context_residual", False),  # use getattr to keep compatibility
                    getattr(args, "replace_sos", False),  # use getattr to keep compatibility

@@ -44,8 +44,37 @@ CTC_LOSS_THRESHOLD = 10000
 class Reporter(chainer.Chain):
     """A chainer reporter wrapper."""
 
-    def report(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
-        """Report at every step."""
+    def report_senone(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
+        reporter.report({'senone_loss_ctc': loss_ctc}, self)
+        reporter.report({'senone_loss_att': loss_att}, self)
+        reporter.report({'senone_acc': acc}, self)
+        reporter.report({'senone_cer_ctc': cer_ctc}, self)
+        reporter.report({'senone_cer': cer}, self)
+        reporter.report({'senone_wer': wer}, self)
+        logging.info('senone_mtl loss:' + str(mtl_loss))
+        reporter.report({'senone_loss': mtl_loss}, self)
+
+    def report_phn(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
+        reporter.report({'phn_loss_ctc': loss_ctc}, self)
+        reporter.report({'phn_loss_att': loss_att}, self)
+        reporter.report({'phn_acc': acc}, self)
+        reporter.report({'phn_cer_ctc': cer_ctc}, self)
+        reporter.report({'phn_cer': cer}, self)
+        reporter.report({'phn_wer': wer}, self)
+        logging.info('phn_mtl loss:' + str(mtl_loss))
+        reporter.report({'phn_loss': mtl_loss}, self)
+
+    def report_char(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
+        reporter.report({'char_loss_ctc': loss_ctc}, self)
+        reporter.report({'char_loss_att': loss_att}, self)
+        reporter.report({'char_acc': acc}, self)
+        reporter.report({'char_cer_ctc': cer_ctc}, self)
+        reporter.report({'char_cer': cer}, self)
+        reporter.report({'char_wer': wer}, self)
+        logging.info('char_mtl loss:' + str(mtl_loss))
+        reporter.report({'char_loss': mtl_loss}, self)
+
+    def report_all(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
         reporter.report({'loss_ctc': loss_ctc}, self)
         reporter.report({'loss_att': loss_att}, self)
         reporter.report({'acc': acc}, self)
@@ -140,7 +169,7 @@ class E2E(ASRInterface, torch.nn.Module):
                            help='Apply label smoothing with a specified distribution type')
         return parser
 
-    def __init__(self, idim, odim, args):
+    def __init__(self, idim, odims, args):
         """Construct an E2E object.
 
         :param int idim: dimension of inputs
@@ -149,22 +178,40 @@ class E2E(ASRInterface, torch.nn.Module):
         """
         super(E2E, self).__init__()
         torch.nn.Module.__init__(self)
+
+        self.odim0 = odims[0]
+        self.odim1 = odims[1]
+        self.odim2 = odims[2]
+
         self.mtlalpha = args.mtlalpha
         assert 0.0 <= self.mtlalpha <= 1.0, "mtlalpha should be [0.0, 1.0]"
         self.etype = args.etype
         self.verbose = args.verbose
         # NOTE: for self.build method
+        args.senone_list = getattr(args, "senone_list", None)
+        args.phn_list = getattr(args, "phn_list", None)
         args.char_list = getattr(args, "char_list", None)
+
+        self.senone_list = args.senone_list
+        self.phn_list = args.phn_list
         self.char_list = args.char_list
+
         self.outdir = args.outdir
         self.space = args.sym_space
         self.blank = args.sym_blank
         self.reporter = Reporter()
+        self.tap_senone_enc = int(args.tap_enc_senone)
+        self.tap_phn_enc = int(args.tap_enc_phn)
 
         # below means the last number becomes eos/sos ID
         # note that sos/eos IDs are identical
-        self.sos = odim - 1
-        self.eos = odim - 1
+        self.sos0 = self.odim0 - 1
+        self.sos1 = self.odim1 - 1
+        self.sos2 = self.odim2 - 1
+
+        self.eos0 = self.odim0 - 1
+        self.eos1 = self.odim1 - 1
+        self.eos2 = self.odim2 - 1
 
         # subsample info
         self.subsample = get_subsample(args, mode='asr', arch='rnn')
@@ -192,11 +239,17 @@ class E2E(ASRInterface, torch.nn.Module):
         # encoder
         self.enc = encoder_for(args, idim, self.subsample)
         # ctc
-        self.ctc = ctc_for(args, odim)
+        self.ctc0 = ctc_for(args, self.odim0)
+        self.ctc1 = ctc_for(args, self.odim1)
+        self.ctc2 = ctc_for(args, self.odim2)
         # attention
-        self.att = att_for(args)
+        self.att0 = att_for(args)
+        self.att1 = att_for(args)
+        self.att2 = att_for(args)
         # decoder
-        self.dec = decoder_for(args, odim, self.sos, self.eos, self.att, labeldist)
+        self.dec0 = decoder_for(args, self.odim0, self.sos0, self.eos0, self.att0, labeldist, self.senone_list)
+        self.dec1 = decoder_for(args, self.odim1, self.sos1, self.eos1, self.att1, labeldist, self.phn_list)
+        self.dec2 = decoder_for(args, self.odim2, self.sos2, self.eos2, self.att2, labeldist, self.char_list)
 
         # weight initialization
         self.init_like_chainer()
@@ -233,13 +286,26 @@ class E2E(ASRInterface, torch.nn.Module):
         lecun_normal_init_parameters(self)
         # exceptions
         # embed weight ~ Normal(0, 1)
-        self.dec.embed.weight.data.normal_(0, 1)
+        
+        self.dec0.embed.weight.data.normal_(0, 1)
         # forget-bias = 1.0
         # https://discuss.pytorch.org/t/set-forget-gate-bias-of-lstm/1745
-        for l in six.moves.range(len(self.dec.decoder)):
-            set_forget_bias_to_one(self.dec.decoder[l].bias_ih)
+        for l in six.moves.range(len(self.dec0.decoder)):
+            set_forget_bias_to_one(self.dec0.decoder[l].bias_ih)
+        
+        self.dec1.embed.weight.data.normal_(0, 1)
+        # forget-bias = 1.0
+        # https://discuss.pytorch.org/t/set-forget-gate-bias-of-lstm/1745
+        for l in six.moves.range(len(self.dec1.decoder)):
+            set_forget_bias_to_one(self.dec1.decoder[l].bias_ih)
+        
+        self.dec2.embed.weight.data.normal_(0, 1)
+        # forget-bias = 1.0
+        # https://discuss.pytorch.org/t/set-forget-gate-bias-of-lstm/1745
+        for l in six.moves.range(len(self.dec2.decoder)):
+            set_forget_bias_to_one(self.dec2.decoder[l].bias_ih)
 
-    def forward(self, xs_pad, ilens, ys_pad):
+    def forward(self, xs_pad, ilens, ys_pads):
         """E2E forward.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -249,27 +315,278 @@ class E2E(ASRInterface, torch.nn.Module):
         :rtype: torch.Tensor
         """
         # 0. Frontend
+        self.combined_loss = 0
+
+        ys_pad_senone = ys_pads[0]
         if self.frontend is not None:
-            hs_pad, hlens, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
-            hs_pad, hlens = self.feature_transform(hs_pad, hlens)
+            hs_pad_orig, hlens_orig, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
+            hs_pad_orig, hlens_orig = self.feature_transform(hs_pad_orig, hlens_orig)
         else:
-            hs_pad, hlens = xs_pad, ilens
+            hs_pad_orig, hlens_orig = xs_pad, ilens
 
         # 1. Encoder
-        hs_pad, hlens, _ = self.enc(hs_pad, hlens)
+        hs_pad_senone, hlens_senone, _ = self.enc(hs_pad_orig, hlens_orig, tap_layer=self.tap_senone_enc)
 
         # 2. CTC loss
         if self.mtlalpha == 0:
-            self.loss_ctc = None
+            self.loss_ctc_senone = None
         else:
-            self.loss_ctc = self.ctc(hs_pad, hlens, ys_pad)
+            self.loss_ctc_senone = self.ctc0(hs_pad_senone, hlens_senone, ys_pad_senone)
 
         # 3. attention loss
         if self.mtlalpha == 1:
-            self.loss_att, acc = None, None
+            self.loss_att_senone, acc = None, None
         else:
-            self.loss_att, acc, _ = self.dec(hs_pad, hlens, ys_pad)
-        self.acc = acc
+            self.loss_att_senone, acc, _ = self.dec0(hs_pad_senone, hlens_senone, ys_pad_senone)
+        self.acc_senone = acc
+
+        # 4. compute cer without beam search
+        if self.mtlalpha == 0 or self.senone_list is None:
+            cer_ctc = None
+        else:
+            cers = []
+
+            y_hats = self.ctc0.argmax(hs_pad_senone).data
+            for i, y in enumerate(y_hats):
+                y_hat = [x[0] for x in groupby(y)]
+                y_true = ys_pad_senone[i]
+
+                seq_hat = [self.senone_list[int(idx)] for idx in y_hat if int(idx) != -1]
+                seq_true = [self.senone_list[int(idx)] for idx in y_true if int(idx) != -1]
+                seq_hat_text = "".join(seq_hat).replace(self.space, ' ')
+                seq_hat_text = seq_hat_text.replace(self.blank, '')
+                seq_true_text = "".join(seq_true).replace(self.space, ' ')
+
+                hyp_chars = seq_hat_text.replace(' ', '')
+                ref_chars = seq_true_text.replace(' ', '')
+                if len(ref_chars) > 0:
+                    cers.append(editdistance.eval(hyp_chars, ref_chars) / len(ref_chars))
+
+            cer_ctc = sum(cers) / len(cers) if cers else None
+
+        # 5. compute cer/wer
+        if self.training or not (self.report_cer or self.report_wer):
+            cer, wer = 0.0, 0.0
+            # oracle_cer, oracle_wer = 0.0, 0.0
+        else:
+            if self.recog_args.ctc_weight > 0.0:
+                lpz = self.ctc0.log_softmax(hs_pad_senone).data
+            else:
+                lpz = None
+
+            word_eds, word_ref_lens, char_eds, char_ref_lens = [], [], [], []
+            nbest_hyps = self.dec.recognize_beam_batch(
+                hs_pad_senone, torch.tensor(hlens_senone), lpz,
+                self.recog_args, self.senone_list,
+                self.rnnlm)
+            # remove <sos> and <eos>
+            y_hats = [nbest_hyp[0]['yseq'][1:-1] for nbest_hyp in nbest_hyps]
+            for i, y_hat in enumerate(y_hats):
+                y_true = ys_pad_senone[i]
+
+                seq_hat = [self.senone_list[int(idx)] for idx in y_hat if int(idx) != -1]
+                seq_true = [self.senone_list[int(idx)] for idx in y_true if int(idx) != -1]
+                seq_hat_text = "".join(seq_hat).replace(self.recog_args.space, ' ')
+                seq_hat_text = seq_hat_text.replace(self.recog_args.blank, '')
+                seq_true_text = "".join(seq_true).replace(self.recog_args.space, ' ')
+
+                hyp_words = seq_hat_text.split()
+                ref_words = seq_true_text.split()
+                word_eds.append(editdistance.eval(hyp_words, ref_words))
+                word_ref_lens.append(len(ref_words))
+                hyp_chars = seq_hat_text.replace(' ', '')
+                ref_chars = seq_true_text.replace(' ', '')
+                char_eds.append(editdistance.eval(hyp_chars, ref_chars))
+                char_ref_lens.append(len(ref_chars))
+
+            wer = 0.0 if not self.report_wer else float(sum(word_eds)) / sum(word_ref_lens)
+            cer = 0.0 if not self.report_cer else float(sum(char_eds)) / sum(char_ref_lens)
+
+        alpha = self.mtlalpha
+        if alpha == 0:
+            self.loss = self.loss_att_senone
+            loss_att_data = float(self.loss_att_senone)
+            loss_ctc_data = None
+        elif alpha == 1:
+            self.loss = self.loss_ctc_senone
+            loss_att_data = None
+            loss_ctc_data = float(self.loss_ctc_senone)
+        else:
+            self.loss = alpha * self.loss_ctc_senone + (1 - alpha) * self.loss_att_senone
+            loss_att_data = float(self.loss_att_senone)
+            loss_ctc_data = float(self.loss_ctc_senone)
+
+        loss_data = float(self.loss)
+
+        senone_loss_ctc_data = loss_ctc_data
+        senone_loss_att_data = loss_att_data
+        senone_acc = acc
+        senone_cer_ctc = cer_ctc
+        senone_cer = cer
+        senone_wer = wer
+        senone_loss_data = loss_data
+
+        if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
+            self.reporter.report_senone(senone_loss_ctc_data, senone_loss_att_data, senone_acc, senone_cer_ctc, senone_cer, senone_wer, senone_loss_data)
+        else:
+            logging.warning('loss (=%f) is not correct', loss_data)
+        
+        self.combined_loss += self.loss/3
+        logging.info("loss DEBUG: senone loss" + str(senone_loss_data))
+
+
+
+
+
+
+        ys_pad_phn = ys_pads[1]
+
+        if self.frontend is not None:
+            hs_pad_phoneme, hlens_phn, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
+            hs_pad_phoneme, hlens_phn = self.feature_transform(hs_pad_phoneme, hlens_phn)
+        else:
+            hs_pad_phoneme, hlens_phn = xs_pad, ilens
+
+        # 1. Encoder
+        hs_pad_phoneme, hlens_phn, _ = self.enc(hs_pad_phoneme, hlens_phn, tap_layer=self.tap_phn_enc)
+
+        # 2. CTC loss
+        if self.mtlalpha == 0:
+            self.loss_ctc_phn = None
+        else:
+            self.loss_ctc_phn = self.ctc1(hs_pad_phoneme, hlens_phn, ys_pad_phn)
+
+        # 3. attention loss
+        if self.mtlalpha == 1:
+            self.loss_att_phn, acc = None, None
+        else:
+            self.loss_att_phn, acc, _ = self.dec1(hs_pad_phoneme, hlens_phn, ys_pad_phn)
+        self.acc_phn = acc
+
+        # 4. compute cer without beam search
+        if self.mtlalpha == 0 or self.phn_list is None:
+            cer_ctc = None
+        else:
+            cers = []
+
+            y_hats = self.ctc1.argmax(hs_pad_phoneme).data
+            for i, y in enumerate(y_hats):
+                y_hat = [x[0] for x in groupby(y)]
+                y_true = ys_pad_phn[i]
+
+                seq_hat = [self.phn_list[int(idx)] for idx in y_hat if int(idx) != -1]
+                seq_true = [self.phn_list[int(idx)] for idx in y_true if int(idx) != -1]
+                seq_hat_text = "".join(seq_hat).replace(self.space, ' ')
+                seq_hat_text = seq_hat_text.replace(self.blank, '')
+                seq_true_text = "".join(seq_true).replace(self.space, ' ')
+
+                hyp_chars = seq_hat_text.replace(' ', '')
+                ref_chars = seq_true_text.replace(' ', '')
+                if len(ref_chars) > 0:
+                    cers.append(editdistance.eval(hyp_chars, ref_chars) / len(ref_chars))
+
+            cer_ctc = sum(cers) / len(cers) if cers else None
+
+        # 5. compute cer/wer
+        if self.training or not (self.report_cer or self.report_wer):
+            cer, wer = 0.0, 0.0
+            # oracle_cer, oracle_wer = 0.0, 0.0
+        else:
+            if self.recog_args.ctc_weight > 0.0:
+                lpz = self.ctc1.log_softmax(hs_pad_phoneme).data
+            else:
+                lpz = None
+
+            word_eds, word_ref_lens, char_eds, char_ref_lens = [], [], [], []
+            nbest_hyps = self.dec.recognize_beam_batch(
+                hs_pad_phoneme, torch.tensor(hlens_phn), lpz,
+                self.recog_args, self.phn_list,
+                self.rnnlm)
+            # remove <sos> and <eos>
+            y_hats = [nbest_hyp[0]['yseq'][1:-1] for nbest_hyp in nbest_hyps]
+            for i, y_hat in enumerate(y_hats):
+                y_true = ys_pad_phn[i]
+
+                seq_hat = [self.phn_list[int(idx)] for idx in y_hat if int(idx) != -1]
+                seq_true = [self.phn_list[int(idx)] for idx in y_true if int(idx) != -1]
+                seq_hat_text = "".join(seq_hat).replace(self.recog_args.space, ' ')
+                seq_hat_text = seq_hat_text.replace(self.recog_args.blank, '')
+                seq_true_text = "".join(seq_true).replace(self.recog_args.space, ' ')
+
+                hyp_words = seq_hat_text.split()
+                ref_words = seq_true_text.split()
+                word_eds.append(editdistance.eval(hyp_words, ref_words))
+                word_ref_lens.append(len(ref_words))
+                hyp_chars = seq_hat_text.replace(' ', '')
+                ref_chars = seq_true_text.replace(' ', '')
+                char_eds.append(editdistance.eval(hyp_chars, ref_chars))
+                char_ref_lens.append(len(ref_chars))
+
+            wer = 0.0 if not self.report_wer else float(sum(word_eds)) / sum(word_ref_lens)
+            cer = 0.0 if not self.report_cer else float(sum(char_eds)) / sum(char_ref_lens)
+
+        alpha = self.mtlalpha
+        if alpha == 0:
+            self.loss = self.loss_att_phn
+            loss_att_data = float(self.loss_att_phn)
+            loss_ctc_data = None
+        elif alpha == 1:
+            self.loss = self.loss_ctc_phn
+            loss_att_data = None
+            loss_ctc_data = float(self.loss_ctc_phn)
+        else:
+            self.loss = alpha * self.loss_ctc_phn + (1 - alpha) * self.loss_att_phn
+            loss_att_data = float(self.loss_att_phn)
+            loss_ctc_data = float(self.loss_ctc_phn)
+
+        loss_data = float(self.loss)
+
+        phn_loss_ctc_data = loss_ctc_data
+        phn_loss_att_data = loss_att_data
+        phn_acc = acc
+        phn_cer_ctc = cer_ctc
+        phn_cer = cer
+        phn_wer = wer
+        phn_loss_data = loss_data
+
+        if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
+            self.reporter.report_phn(phn_loss_ctc_data, phn_loss_att_data, phn_acc, phn_cer_ctc, phn_cer, phn_wer, phn_loss_data)
+        else:
+            logging.warning('loss (=%f) is not correct', loss_data)
+        
+        self.combined_loss += self.loss/3
+        logging.info("loss DEBUG: phn loss" + str(phn_loss_data))
+
+
+
+
+
+
+
+
+
+        ys_pad_char = ys_pads[2]
+        if self.frontend is not None:
+            hs_pad_char, hlens_char, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
+            hs_pad_char, hlens_char = self.feature_transform(hs_pad_char, hlens_char)
+        else:
+            hs_pad_char, hlens_char = xs_pad, ilens
+
+        # 1. Encoder
+        hs_pad_char, hlens_char, _ = self.enc(hs_pad_char, hlens_char)
+
+        # 2. CTC loss
+        if self.mtlalpha == 0:
+            self.loss_ctc_char = None
+        else:
+            self.loss_ctc_char = self.ctc2(hs_pad_char, hlens_char, ys_pad_char)
+
+        # 3. attention loss
+        if self.mtlalpha == 1:
+            self.loss_att_char, acc = None, None
+        else:
+            self.loss_att_char, acc, _ = self.dec2(hs_pad_char, hlens_char, ys_pad_char)
+        self.acc_char = acc
 
         # 4. compute cer without beam search
         if self.mtlalpha == 0 or self.char_list is None:
@@ -277,10 +594,10 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             cers = []
 
-            y_hats = self.ctc.argmax(hs_pad).data
+            y_hats = self.ctc2.argmax(hs_pad_char).data
             for i, y in enumerate(y_hats):
                 y_hat = [x[0] for x in groupby(y)]
-                y_true = ys_pad[i]
+                y_true = ys_pad_char[i]
 
                 seq_hat = [self.char_list[int(idx)] for idx in y_hat if int(idx) != -1]
                 seq_true = [self.char_list[int(idx)] for idx in y_true if int(idx) != -1]
@@ -301,19 +618,19 @@ class E2E(ASRInterface, torch.nn.Module):
             # oracle_cer, oracle_wer = 0.0, 0.0
         else:
             if self.recog_args.ctc_weight > 0.0:
-                lpz = self.ctc.log_softmax(hs_pad).data
+                lpz = self.ctc2.log_softmax(hs_pad_char).data
             else:
                 lpz = None
 
             word_eds, word_ref_lens, char_eds, char_ref_lens = [], [], [], []
             nbest_hyps = self.dec.recognize_beam_batch(
-                hs_pad, torch.tensor(hlens), lpz,
+                hs_pad_char, torch.tensor(hlens_char), lpz,
                 self.recog_args, self.char_list,
                 self.rnnlm)
             # remove <sos> and <eos>
             y_hats = [nbest_hyp[0]['yseq'][1:-1] for nbest_hyp in nbest_hyps]
             for i, y_hat in enumerate(y_hats):
-                y_true = ys_pad[i]
+                y_true = ys_pad_char[i]
 
                 seq_hat = [self.char_list[int(idx)] for idx in y_hat if int(idx) != -1]
                 seq_true = [self.char_list[int(idx)] for idx in y_true if int(idx) != -1]
@@ -335,23 +652,46 @@ class E2E(ASRInterface, torch.nn.Module):
 
         alpha = self.mtlalpha
         if alpha == 0:
-            self.loss = self.loss_att
-            loss_att_data = float(self.loss_att)
+            self.loss = self.loss_att_char
+            loss_att_data = float(self.loss_att_char)
             loss_ctc_data = None
         elif alpha == 1:
-            self.loss = self.loss_ctc
+            self.loss = self.loss_ctc_char
             loss_att_data = None
-            loss_ctc_data = float(self.loss_ctc)
+            loss_ctc_data = float(self.loss_ctc_char)
         else:
-            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att
-            loss_att_data = float(self.loss_att)
-            loss_ctc_data = float(self.loss_ctc)
+            self.loss = alpha * self.loss_ctc_char + (1 - alpha) * self.loss_att_char
+            loss_att_data = float(self.loss_att_char)
+            loss_ctc_data = float(self.loss_ctc_char)
 
         loss_data = float(self.loss)
+
+        char_loss_ctc_data = loss_ctc_data
+        char_loss_att_data = loss_att_data
+        char_acc = acc
+        char_cer_ctc = cer_ctc
+        char_cer = cer
+        char_wer = wer
+        char_loss_data = loss_data
+
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
-            self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data)
+            self.reporter.report_char(char_loss_ctc_data, char_loss_att_data, char_acc, char_cer_ctc, char_cer, char_wer, char_loss_data)
         else:
             logging.warning('loss (=%f) is not correct', loss_data)
+        
+        self.reporter.report_all(senone_loss_ctc_data + phn_loss_ctc_data + char_loss_ctc_data, \
+            senone_loss_att_data + phn_loss_att_data + char_loss_att_data, \
+                (senone_acc + phn_acc + char_acc)/3, \
+                    (senone_cer_ctc + phn_cer_ctc + char_cer_ctc)/3, \
+                        (senone_cer + phn_cer + char_cer)/3, \
+                            (senone_wer + phn_wer + char_wer)/3, \
+                                (senone_loss_data + phn_loss_data + char_loss_data)/3)
+
+        self.combined_loss += self.loss/3
+        logging.info("loss DEBUG: char loss" + str(char_loss_data))
+
+
+
         return self.loss
 
     def scorers(self):
@@ -408,7 +748,7 @@ class E2E(ASRInterface, torch.nn.Module):
         y = self.dec.recognize_beam(hs[0], lpz, recog_args, char_list, rnnlm)
         return y
 
-    def recognize_batch(self, xs, recog_args, char_list, rnnlm=None):
+    def recognize_batch(self, xs, recog_args, char_list, rnnlm=None, trans_type = "phn"):
         """E2E beam search.
 
         :param list xs: list of input acoustic feature arrays [(T_1, D), (T_2, D), ...]
@@ -437,18 +777,33 @@ class E2E(ASRInterface, torch.nn.Module):
         # 1. Encoder
         hs_pad, hlens, _ = self.enc(hs_pad, hlens)
 
-        # calculate log P(z_t|X) for CTC scores
-        if recog_args.ctc_weight > 0.0:
-            lpz = self.ctc.log_softmax(hs_pad)
-            normalize_score = False
-        else:
-            lpz = None
-            normalize_score = True
-
-        # 2. Decoder
-        hlens = torch.tensor(list(map(int, hlens)))  # make sure hlens is tensor
-        y = self.dec.recognize_beam_batch(hs_pad, hlens, lpz, recog_args, char_list,
-                                          rnnlm, normalize_score=normalize_score)
+        if(trans_type == "senone"):
+            # calculate log P(z_t|X) for CTC scores
+            if recog_args.ctc_weight > 0.0:
+                lpz = self.ctc0.log_softmax(hs_pad)
+            else:
+                lpz = None
+            # 2. decoder
+            hlens = torch.tensor(list(map(int, hlens)))  # make sure hlens is tensor
+            y = self.dec0.recognize_beam_batch(hs_pad, hlens, lpz, recog_args, char_list, rnnlm)
+        elif(trans_type == "phn"):
+            # calculate log P(z_t|X) for CTC scores
+            if recog_args.ctc_weight > 0.0:
+                lpz = self.ctc1.log_softmax(hs_pad)
+            else:
+                lpz = None
+            # 2. decoder
+            hlens = torch.tensor(list(map(int, hlens)))  # make sure hlens is tensor
+            y = self.dec1.recognize_beam_batch(hs_pad, hlens, lpz, recog_args, char_list, rnnlm)
+        elif(trans_type == "char"):
+            # calculate log P(z_t|X) for CTC scores
+            if recog_args.ctc_weight > 0.0:
+                lpz = self.ctc2.log_softmax(hs_pad)
+            else:
+                lpz = None
+            # 2. decoder
+            hlens = torch.tensor(list(map(int, hlens)))  # make sure hlens is tensor
+            y = self.dec2.recognize_beam_batch(hs_pad, hlens, lpz, recog_args, char_list, rnnlm)
 
         if prev:
             self.train()
@@ -476,7 +831,7 @@ class E2E(ASRInterface, torch.nn.Module):
             self.train()
         return enhanced.cpu().numpy(), mask.cpu().numpy(), ilens
 
-    def calculate_all_attentions(self, xs_pad, ilens, ys_pad):
+    def calculate_all_attentions(self, xs_pad, ilens, ys_pads, decoder_id=2):
         """E2E attention calculation.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -487,6 +842,7 @@ class E2E(ASRInterface, torch.nn.Module):
             2) other case => attention weights (B, Lmax, Tmax).
         :rtype: float ndarray
         """
+        ys_pad = ys_pads[decoder_id]
         with torch.no_grad():
             # 0. Frontend
             if self.frontend is not None:
@@ -499,7 +855,12 @@ class E2E(ASRInterface, torch.nn.Module):
             hpad, hlens, _ = self.enc(hs_pad, hlens)
 
             # 2. Decoder
-            att_ws = self.dec.calculate_all_attentions(hpad, hlens, ys_pad)
+            if(decoder_id == 0):
+                att_ws = self.dec0.calculate_all_attentions(hpad, hlens, ys_pad)
+            elif(decoder_id == 1):
+                att_ws = self.dec1.calculate_all_attentions(hpad, hlens, ys_pad)
+            elif(decoder_id == 2):
+                att_ws = self.dec2.calculate_all_attentions(hpad, hlens, ys_pad)
 
         return att_ws
 

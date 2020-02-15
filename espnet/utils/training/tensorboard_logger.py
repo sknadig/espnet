@@ -6,7 +6,7 @@ class TensorboardLogger(Extension):
 
     default_name = "espnet_tensorboard_logger"
 
-    def __init__(self, logger, att_reporter=None, entries=None, epoch=0):
+    def __init__(self, logger, att_reporter=None, entries=None, epoch=0, decoder_id=2):
         """Init the extension
 
         :param SummaryWriter logger: The logger to use
@@ -18,7 +18,8 @@ class TensorboardLogger(Extension):
         self._att_reporter = att_reporter
         self._logger = logger
         self._epoch = epoch
-
+        self.decoder_id = decoder_id
+        
     def __call__(self, trainer):
         """Updates the events file with the new values
 
@@ -36,4 +37,4 @@ class TensorboardLogger(Extension):
                 self._logger.add_scalar(k, v, trainer.updater.iteration)
         if self._att_reporter is not None and trainer.updater.get_iterator('main').epoch > self._epoch:
             self._epoch = trainer.updater.get_iterator('main').epoch
-            self._att_reporter.log_attentions(self._logger, trainer.updater.iteration)
+            self._att_reporter.log_attentions(self._logger, trainer.updater.iteration, self.decoder_id)

@@ -54,6 +54,12 @@ def get_parser(parser=None, required=True):
                         help='Debugmode')
     parser.add_argument('--dict', required=required,
                         help='Dictionary')
+    parser.add_argument('--dict-senone', required=True,
+                        help='Dictionary')
+    parser.add_argument('--dict-phn', required=True,
+                        help='Dictionary')
+    parser.add_argument('--dict-char', required=True,
+                        help='Dictionary')
     parser.add_argument('--seed', default=1, type=int,
                         help='Random seed')
     parser.add_argument('--debugdir', type=str,
@@ -174,6 +180,12 @@ def get_parser(parser=None, required=True):
                         choices=[1, 2],
                         help='Number of speakers in the speech.')
     # decoder related
+    parser.add_argument('--num-targets', type=int, default=3,
+                        help='Tap encoder output for phoneme recognition')
+    parser.add_argument('--tap-enc-senone', type=int, default=1,
+                        help='Tap encoder output for phoneme recognition')
+    parser.add_argument('--tap-enc-phn', type=int, default=1,
+                        help='Tap encoder output for phoneme recognition')
     parser.add_argument('--context-residual', default=False, type=strtobool, nargs='?',
                         help='The flag to switch to use context vector residual in the decoder network')
     # finetuning related
@@ -332,8 +344,30 @@ def main(cmd_args):
     np.random.seed(args.seed)
 
     # load dictionary for debug log
-    if args.dict is not None:
-        with open(args.dict, 'rb') as f:
+    if args.dict_senone is not None:
+        with open(args.dict_senone, 'rb') as f:
+            dictionary = f.readlines()
+        senone_list = [entry.decode('utf-8').split(' ')[0]
+                     for entry in dictionary]
+        senone_list.insert(0, '<blank>')
+        senone_list.append('<eos>')
+        args.senone_list = senone_list
+    else:
+        args.senone_list = None
+    
+    if args.dict_phn is not None:
+        with open(args.dict_phn, 'rb') as f:
+            dictionary = f.readlines()
+        phn_list = [entry.decode('utf-8').split(' ')[0]
+                     for entry in dictionary]
+        phn_list.insert(0, '<blank>')
+        phn_list.append('<eos>')
+        args.phn_list = phn_list
+    else:
+        args.phn_list = None
+
+    if args.dict_char is not None:
+        with open(args.dict_char, 'rb') as f:
             dictionary = f.readlines()
         char_list = [entry.decode('utf-8').split(' ')[0]
                      for entry in dictionary]

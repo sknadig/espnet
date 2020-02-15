@@ -280,8 +280,18 @@ class CustomConverter(object):
 
         ilens = torch.from_numpy(ilens).to(device)
         # NOTE: this is for multi-output (e.g., speech translation)
-        ys_pad = pad_list([torch.from_numpy(np.array(y[0][:]) if isinstance(y, tuple) else y).long()
-                           for y in ys], self.ignore_id).to(device)
+        ys_pad0 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[0]], self.ignore_id).to(device)
+        ys_pad1 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[1]], self.ignore_id).to(device)
+        ys_pad2 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[2]], self.ignore_id).to(device)
+
+        logging.info("asr DEBUG: ys_pad0" + str(ys_pad0.size()))
+        logging.info("asr DEBUG: ys_pad1" + str(ys_pad1.size()))
+        logging.info("asr DEBUG: ys_pad2" + str(ys_pad2.size()))
+        
+        ys_pad = [ys_pad0, ys_pad1, ys_pad2]
 
         return xs_pad, ilens, ys_pad
 
@@ -331,9 +341,19 @@ class CustomConverterMulEnc(object):
                        in range(self.num_encs)]
 
         ilens_list = [torch.from_numpy(ilens_list[i]).to(device) for i in range(self.num_encs)]
-        # NOTE: this is for multi-task learning (e.g., speech translation)
-        ys_pad = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
-                           for y in ys], self.ignore_id).to(device)
+        # NOTE: this is for multi-task learning (e.g., speech translation)        
+        ys_pad0 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[0]], self.ignore_id).to(device)
+        ys_pad1 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[1]], self.ignore_id).to(device)
+        ys_pad2 = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
+                           for y in ys[2]], self.ignore_id).to(device)
+
+        logging.info("asr DEBUG: ys_pad0" + str(ys_pad0.size()))
+        logging.info("asr DEBUG: ys_pad1" + str(ys_pad1.size()))
+        logging.info("asr DEBUG: ys_pad2" + str(ys_pad2.size()))
+        
+        ys_pad = [ys_pad0, ys_pad1, ys_pad2]
 
         return xs_list_pad, ilens_list, ys_pad
 
@@ -358,10 +378,10 @@ def train(args):
         valid_json = json.load(f)['utts']
     utts = list(valid_json.keys())
     idim_list = [int(valid_json[utts[0]]['input'][i]['shape'][-1]) for i in range(args.num_encs)]
-    odim = int(valid_json[utts[0]]['output'][0]['shape'][-1])
+    odim_list = [int(valid_json[utts[0]]['output'][i]['shape'][-1]) for i in range(args.num_targets)]
     for i in range(args.num_encs):
         logging.info('stream{}: input dims : {}'.format(i + 1, idim_list[i]))
-    logging.info('#output dims: ' + str(odim))
+    logging.info('#output dims: ' + str(odim_list))
 
     # specify attention, CTC, hybrid mode
     if args.mtlalpha == 1.0:
@@ -375,10 +395,10 @@ def train(args):
         logging.info('Multitask learning mode')
 
     if (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
-        model = load_trained_modules(idim_list[0], odim, args)
+        model = load_trained_modules(idim_list[0], odim_list, args)
     else:
         model_class = dynamic_import(args.model_module)
-        model = model_class(idim_list[0] if args.num_encs == 1 else idim_list, odim, args)
+        model = model_class(idim_list[0] if args.num_encs == 1 else idim_list, odim_list, args)
     assert isinstance(model, ASRInterface)
 
     if args.rnnlm is not None:
@@ -395,7 +415,7 @@ def train(args):
     model_conf = args.outdir + '/model.json'
     with open(model_conf, 'wb') as f:
         logging.info('writing a model config file to ' + model_conf)
-        f.write(json.dumps((idim_list[0] if args.num_encs == 1 else idim_list, odim, vars(args)),
+        f.write(json.dumps((idim_list[0] if args.num_encs == 1 else idim_list, odim_list, vars(args)),
                            indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
     for key in sorted(vars(args).keys()):
         logging.info('ARGS: ' + key + ': ' + str(vars(args)[key]))
@@ -542,10 +562,19 @@ def train(args):
         else:
             att_vis_fn = model.calculate_all_attentions
             plot_class = model.attention_plot_class
-        att_reporter = plot_class(
-            att_vis_fn, data, args.outdir + "/att_ws",
-            converter=converter, transform=load_cv, device=device)
-        trainer.extend(att_reporter, trigger=(1, 'epoch'))
+        att_reporter0 = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws_senone",
+            converter=converter, transform=load_cv, device=device, decoder_id=0)
+        att_reporter1 = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws_phn",
+            converter=converter, transform=load_cv, device=device, decoder_id=1)
+        att_reporter2 = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws_char",
+            converter=converter, transform=load_cv, device=device, decoder_id=2)
+        
+        trainer.extend(att_reporter0, trigger=(1, 'epoch'))
+        trainer.extend(att_reporter1, trigger=(1, 'epoch'))
+        trainer.extend(att_reporter2, trigger=(1, 'epoch'))
     else:
         att_reporter = None
 
@@ -624,7 +653,11 @@ def train(args):
     set_early_stop(trainer, args)
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
-        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter),
+        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter0, decoder_id=0),
+                       trigger=(args.report_interval_iters, "iteration"))
+        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter1, decoder_id=1),
+                       trigger=(args.report_interval_iters, "iteration"))
+        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter2, decoder_id=2),
                        trigger=(args.report_interval_iters, "iteration"))
     # Run the training
     trainer.run()
@@ -683,9 +716,17 @@ def recog(args):
             rnnlm.cuda()
 
     # read json data
-    with open(args.recog_json, 'rb') as f:
-        js = json.load(f)['utts']
+    with open(args.recog_senone_json, 'rb') as f:
+        senone_js = json.load(f)['utts']
+    with open(args.recog_phn_json, 'rb') as f:
+        phn_js = json.load(f)['utts']
+    with open(args.recog_char_json, 'rb') as f:
+        char_js = json.load(f)['utts']
+
     new_js = {}
+    new_senone_js = {}
+    new_phn_js = {}
+    new_char_js = {}
 
     load_inputs_and_targets = LoadInputsAndTargets(
         mode='asr', load_output=False, sort_in_input_length=False,
@@ -748,7 +789,7 @@ def recog(args):
         with torch.no_grad():
             for names in grouper(args.batchsize, keys, None):
                 names = [name for name in names if name]
-                batch = [(name, js[name]) for name in names]
+                batch = [(name, senone_js[name]) for name in names]
                 feats = load_inputs_and_targets(batch)[0] if args.num_encs == 1 else load_inputs_and_targets(batch)
                 if args.streaming_mode == 'window' and args.num_encs == 1:
                     raise NotImplementedError
@@ -775,11 +816,21 @@ def recog(args):
                                 nbest_hyps[n]['score'] += hyps[n]['score']
                     nbest_hyps = [nbest_hyps]
                 else:
-                    nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm)
+                    senone_nbest_hyps = model.recognize_batch(feats, args, train_args.senone_list, rnnlm=rnnlm, trans_type = "senone")
+                    phn_nbest_hyps = model.recognize_batch(feats, args, train_args.phn_list, rnnlm=rnnlm, trans_type = "phn")
+                    char_nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm, trans_type = "char")
 
-                for i, nbest_hyp in enumerate(nbest_hyps):
+                for i, nbest_hyp in enumerate(senone_nbest_hyps):
                     name = names[i]
-                    new_js[name] = add_results_to_json(js[name], nbest_hyp, train_args.char_list)
+                    new_senone_js[name] = add_results_to_json(senone_js[name], nbest_hyp, train_args.senone_list)
+
+                for i, nbest_hyp in enumerate(phn_nbest_hyps):
+                    name = names[i]
+                    new_phn_js[name] = add_results_to_json(phn_js[name], nbest_hyp, train_args.phn_list)
+
+                for i, nbest_hyp in enumerate(char_nbest_hyps):
+                    name = names[i]
+                    new_char_js[name] = add_results_to_json(char_js[name], nbest_hyp, train_args.char_list)
 
     with open(args.result_label, 'wb') as f:
         f.write(json.dumps({'utts': new_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))

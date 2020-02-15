@@ -136,6 +136,12 @@ else
 fi
 expdir=exp/${expname}
 mkdir -p ${expdir}
+
+dict=data/lang_1char/${train_set}_units.txt
+dict_senone=data/lang_1char/${train_set}_units.senone.txt
+dict_phn=data/lang_1char/${train_set}_units.phn.txt
+dict_char=data/lang_1char/${train_set}_units.char.txt
+
 if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     echo "stage 3: Network Training"
     ${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
@@ -147,6 +153,9 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     --tensorboard-dir tensorboard/${expname} \
     --debugmode ${debugmode} \
     --dict ${dict} \
+    --dict-phn ${dict_phn} \
+    --dict-senone ${dict_senone} \
+    --dict-char ${dict_char} \
     --debugdir ${expdir} \
     --minibatches ${N} \
     --verbose ${verbose} \
@@ -157,17 +166,25 @@ fi
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Decoding"
-    nj=8
+    nj=1
+    ngpu=1
+    batchsize=1
+    
     for rtask in ${recog_set}; do
         (
             decode_dir=decode_${rtask}_$(basename ${decode_config%.*})
             feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
+            mkdir -p ${expdir}/${decode_dir}/senones/
+            mkdir -p ${expdir}/${decode_dir}/phns/
+            mkdir -p ${expdir}/${decode_dir}/chars/
 
             # split data
-            splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
+            
+            # splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
+            splitjson.py --parts ${nj} ${feat_recog_dir}/data_senone.json
+            splitjson.py --parts ${nj} ${feat_recog_dir}/data_phn.json
+            splitjson.py --parts ${nj} ${feat_recog_dir}/data_char.json
 
-            #### use CPU for decoding
-            ngpu=0
 
             ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
             asr_recog.py \
@@ -176,12 +193,27 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
             --backend ${backend} \
             --debugmode ${debugmode} \
             --verbose ${verbose} \
-            --recog-json ${feat_recog_dir}/split${nj}utt/data.JOB.json \
-            --result-label ${expdir}/${decode_dir}/data.JOB.json \
-            --model ${expdir}/results/${recog_model}
+            --recog-senone-json ${feat_recog_dir}/split${nj}utt/data_senone.JOB.json \
+            --recog-phn-json ${feat_recog_dir}/split${nj}utt/data_phn.JOB.json \
+            --recog-char-json ${feat_recog_dir}/split${nj}utt/data_char.JOB.json \
+            --senone-result-label ${expdir}/${decode_dir}/phns/data_senone.JOB.json \
+            --phn-result-label ${expdir}/${decode_dir}/phns/data_phn.JOB.json \
+            --char-result-label ${expdir}/${decode_dir}/chars/data_char.JOB.json \
+            --model ${expdir}/results/${recog_model} \
+	        --batchsize ${batchsize}
 
-            score_sclite.sh ${expdir}/${decode_dir} ${dict}
+            concatjson.py ${expdir}/${decode_dir}/senones/data_*.json > ${expdir}/${decode_dir}/senones/data.json
+            concatjson.py ${expdir}/${decode_dir}/phns/data_*.json > ${expdir}/${decode_dir}/phns/data.json
+            concatjson.py ${expdir}/${decode_dir}/chars/data_*.json > ${expdir}/${decode_dir}/chars/data.json
 
+            json2trn.py ${expdir}/${decode_dir}/senones/data.json data/lang_1char/${train_set}_units.senone.txt --refs ${expdir}/${decode_dir}/senones/ref.trn --hyps ${expdir}/${decode_dir}/senones/hyp.trn
+            json2trn.py ${expdir}/${decode_dir}/phns/data.json data/lang_1char/${train_set}_units.phn.txt --refs ${expdir}/${decode_dir}/phns/ref.trn --hyps ${expdir}/${decode_dir}/phns/hyp.trn
+            json2trn.py ${expdir}/${decode_dir}/chars/data.json data/lang_1char/${train_set}_units.char.txt --refs ${expdir}/${decode_dir}/chars/ref.trn --hyps ${expdir}/${decode_dir}/chars/hyp.trn
+
+            sclite -r ${expdir}/${decode_dir}/senones/ref.trn -h ${expdir}/${decode_dir}/senones/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/senones/results.txt
+            sclite -r ${expdir}/${decode_dir}/phns/ref.trn -h ${expdir}/${decode_dir}/phns/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/phns/results.txt
+            sclite -r ${expdir}/${decode_dir}/chars/ref.trn -h ${expdir}/${decode_dir}/chars/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/chars/results.txt
+            
         ) &
     done
     wait

@@ -229,7 +229,7 @@ class LoadInputsAndTargets(object):
             if len(y_feats_dict) == 1:
                 ys = [ys[i] for i in nonzero_sorted_idx]
             elif len(y_feats_dict) > 1:  # multi-speaker asr mode
-                ys = zip(*[[y[i] for i in nonzero_sorted_idx] for y in ys])
+                ys = ys
 
             y_name = list(y_feats_dict.keys())[0]
 
