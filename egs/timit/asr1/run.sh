@@ -46,11 +46,13 @@ train_dev=train_dev
 recog_set="train_dev test"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
-    local/timit_data_prep.sh ${timit} ${trans_type} || exit 1
-fi
-
-if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
-    local/timit_format_data.sh
+    for trans_type in phn char; do
+        local/timit_data_prep.sh ${timit} ${trans_type} || exit 1
+        local/timit_format_data.sh ${trans_type}
+    done;
+    for x in train test dev; do
+        cp ~/MS/kaldi/egs/timit/s5/exp/tri3_ali_$x/$x.text.senone .data/$x/text.senone
+    done
 fi
 
 feat_tr_dir=${dumpdir}/${train_set}/delta${do_delta}; mkdir -p ${feat_tr_dir}
@@ -87,26 +89,40 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     done
 fi
 
-dict=data/lang_1char/${train_set}_units.txt
-echo "dictionary: ${dict}"
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
-    ### Task dependent. You have to check non-linguistic symbols used in the corpus.
-    echo "stage 2: Dictionary and Json Data Preparation"
-    mkdir -p data/lang_1char/
-    echo "<unk> 1" > ${dict} # <unk> must be 1, 0 will be used for "blank" in CTC
-    text2token.py -s 1 -n 1 data/${train_set}/text --trans_type ${trans_type} | cut -f 2- -d" " | tr " " "\n" \
-    | sort | uniq | grep -v -e '^\s*$' | awk '{print $0 " " NR+1}' >> ${dict}
-    wc -l ${dict}
+    for trans_type in char phn senone; do
+        dict=data/lang_1char/${train_set}_units.${trans_type}.txt
+        ### Task dependent. You have to check non-linguistic symbols used in the corpus.
+        echo "stage 2: Dictionary and Json Data Preparation"
+        echo "dictionary: ${dict}"
+        mkdir -p data/lang_1char/
+        echo "<unk> 1" > ${dict} # <unk> must be 1, 0 will be used for "blank" in CTC
+        if [ $trans_type = "senone" ]
+        then
+            echo "Senone IDs"
+            text2token.py -s 1 -n 1 data/${train_set}/text.${trans_type} --trans_type ${trans_type} | cut -f 2- -d" " | tr " " "\n" \
+            | sort -n | uniq | grep -v -e '^\s*$' | awk '{print $0 " " NR+1}' >> ${dict}
+        else
+            echo "non senone IDs"
+            text2token.py -s 1 -n 1 data/${train_set}/text.${trans_type} --trans_type ${trans_type} | cut -f 2- -d" " | tr " " "\n" \
+            | sort | uniq | grep -v -e '^\s*$' | awk '{print $0 " " NR+1}' >> ${dict}
+        fi
+        wc -l ${dict}
 
-    # make json labels
-    data2json.sh --feat ${feat_tr_dir}/feats.scp --trans_type ${trans_type} \
-    data/${train_set} ${dict} > ${feat_tr_dir}/data.json
-    data2json.sh --feat ${feat_dt_dir}/feats.scp --trans_type ${trans_type} \
-    data/${train_dev} ${dict} > ${feat_dt_dir}/data.json
-    for rtask in ${recog_set}; do
-        feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
-        data2json.sh --feat ${feat_recog_dir}/feats.scp --trans_type ${trans_type} \
-        data/${rtask} ${dict} > ${feat_recog_dir}/data.json
+        # make json labels
+        data2json.sh --feat ${feat_tr_dir}/feats.scp --trans_type ${trans_type} \
+        data/${train_set} ${dict} > ${feat_tr_dir}/data_${trans_type}.json
+
+        data2json.sh --feat ${feat_dt_dir}/feats.scp --trans_type ${trans_type} \
+        data/${train_dev} ${dict} > ${feat_dt_dir}/data_${trans_type}.json
+        for rtask in ${recog_set}; do
+            feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
+            data2json.sh --feat ${feat_recog_dir}/feats.scp --trans_type ${trans_type} \
+            data/${rtask} ${dict} > ${feat_recog_dir}/data_${trans_type}.json
+        done
+    done
+    for set in ${train_set} ${train_dev} test; do
+        merge_jsons.py --phn-json ${dumpdir}/${set}/delta${do_delta}/data_phn.json --char-json ${dumpdir}/${set}/delta${do_delta}/data_char.json --senone-json ${dumpdir}/${set}/delta${do_delta}/data_senone.json --out-json ${dumpdir}/${set}/delta${do_delta}/data.json 
     done
 fi
 

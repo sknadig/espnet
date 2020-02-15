@@ -42,7 +42,7 @@ def get_parser():
     parser.add_argument('text', type=str, default=False, nargs='?',
                         help='input text')
     parser.add_argument('--trans_type', '-t', type=str, default="char",
-                        choices=["char", "phn"],
+                        choices=["char", "phn", "senone"],
                         help="""Transcript type. char/phn. e.g., for TIMIT FADG0_SI1279 -
                         If trans_type is char,
                         read from SI1279.WRD file -> "bricks are an alternative"
@@ -100,7 +100,7 @@ def main():
                     i += 1
             a = chars
 
-        if(args.trans_type == "phn"):
+        if(args.trans_type == "phn" or args.trans_type == "senone"):
             a = a.split(" ")
         else:
             a = [a[j:j + n] for j in range(0, len(a), n)]
