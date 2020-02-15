@@ -30,7 +30,7 @@ def main(cmd_args):
     senone_json = json.load(open(args.senone_json, "r"))
     phn_json = json.load(open(args.phn_json, "r"))
     char_json = json.load(open(args.char_json, "r"))
-    out_json = phn_json
+    out_json = senone_json
     
     print("senone json is: ", args.senone_json)
     print("phn json is: ", args.phn_json)
@@ -43,9 +43,9 @@ def main(cmd_args):
     for uttid in char_json["utts"]:
         char_json["utts"][uttid]["output"][0]["name"] = "target2"
     
-    for uttid in phn_json["utts"]:
+    for uttid in senone_json["utts"]:
+        out_json["utts"][uttid]["output"].append(phn_json["utts"][uttid]["output"][0])
         out_json["utts"][uttid]["output"].append(char_json["utts"][uttid]["output"][0])
-        out_json["utts"][uttid]["output"].append(senone_json["utts"][uttid]["output"][0])
     
     with open(args.out_json, "w") as json_out:
         json_out.write(json.dumps(out_json, sort_keys=True, indent=4))
