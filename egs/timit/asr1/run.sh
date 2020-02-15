@@ -51,7 +51,7 @@ if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
         local/timit_format_data.sh ${trans_type}
     done;
     for x in train test dev; do
-        cp ~/MS/kaldi/egs/timit/s5/exp/tri3_ali_$x/$x.text.senone .data/$x/text.senone
+        cp ~/MS/kaldi/egs/timit/s5/exp/tri3_ali_$x/$x.text.senone.uniq ./data/$x/text.senone
     done
 fi
 
