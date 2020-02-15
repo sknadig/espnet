@@ -37,8 +37,11 @@ def main(cmd_args):
     print("char json is: ", args.char_json)
     print("out json is: ", args.out_json)
 
-    for uttid in senone_json["utts"]:
-        senone_json["utts"][uttid]["output"][0]["name"] = "target0"
+    for uttid in out_json["utts"]:
+        out_json["utts"][uttid]["output"][0]["name"] = "target0"
+
+    for uttid in phn_json["utts"]:
+        phn_json["utts"][uttid]["output"][0]["name"] = "target1"
 
     for uttid in char_json["utts"]:
         char_json["utts"][uttid]["output"][0]["name"] = "target2"
