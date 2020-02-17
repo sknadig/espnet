@@ -562,9 +562,9 @@ def train(args):
         else:
             att_vis_fn = model.calculate_all_attentions
             plot_class = model.attention_plot_class
-        att_reporter0 = plot_class(
-            att_vis_fn, data, args.outdir + "/att_ws_senone",
-            converter=converter, transform=load_cv, device=device, decoder_id=0)
+        # att_reporter0 = plot_class(
+        #     att_vis_fn, data, args.outdir + "/att_ws_senone",
+        #     converter=converter, transform=load_cv, device=device, decoder_id=0)
         att_reporter1 = plot_class(
             att_vis_fn, data, args.outdir + "/att_ws_phn",
             converter=converter, transform=load_cv, device=device, decoder_id=1)
@@ -572,7 +572,7 @@ def train(args):
             att_vis_fn, data, args.outdir + "/att_ws_char",
             converter=converter, transform=load_cv, device=device, decoder_id=2)
         
-        trainer.extend(att_reporter0, trigger=(1, 'epoch'))
+        # trainer.extend(att_reporter0, trigger=(1, 'epoch'))
         trainer.extend(att_reporter1, trigger=(1, 'epoch'))
         trainer.extend(att_reporter2, trigger=(1, 'epoch'))
     else:
@@ -653,8 +653,8 @@ def train(args):
     set_early_stop(trainer, args)
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
-        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter0, decoder_id=0),
-                       trigger=(args.report_interval_iters, "iteration"))
+        # trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter0, decoder_id=0),
+                    #    trigger=(args.report_interval_iters, "iteration"))
         trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter1, decoder_id=1),
                        trigger=(args.report_interval_iters, "iteration"))
         trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter2, decoder_id=2),
@@ -716,15 +716,15 @@ def recog(args):
             rnnlm.cuda()
 
     # read json data
-    with open(args.recog_senone_json, 'rb') as f:
-        senone_js = json.load(f)['utts']
+    # with open(args.recog_senone_json, 'rb') as f:
+    #     senone_js = json.load(f)['utts']
     with open(args.recog_phn_json, 'rb') as f:
         phn_js = json.load(f)['utts']
     with open(args.recog_char_json, 'rb') as f:
         char_js = json.load(f)['utts']
 
     new_js = {}
-    new_senone_js = {}
+    # new_senone_js = {}
     new_phn_js = {}
     new_char_js = {}
 
@@ -738,7 +738,7 @@ def recog(args):
         with torch.no_grad():
             for idx, name in enumerate(js.keys(), 1):
                 logging.info('(%d/%d) decoding ' + name, idx, len(js.keys()))
-                batch = [(name, js[name])]
+                batch = [(name, phn_js[name])]
                 feat = load_inputs_and_targets(batch)
                 feat = feat[0][0] if args.num_encs == 1 else [feat[idx][0] for idx in range(model.num_encs)]
                 if args.streaming_mode == 'window' and args.num_encs == 1:
@@ -780,7 +780,7 @@ def recog(args):
             return zip_longest(*kargs, fillvalue=fillvalue)
 
         # sort data if batchsize > 1
-        keys = list(js.keys())
+        keys = list(phn_js.keys())
         if args.batchsize > 1:
             feat_lens = [js[key]['input'][0]['shape'][0] for key in keys]
             sorted_index = sorted(range(len(feat_lens)), key=lambda i: -feat_lens[i])
@@ -789,7 +789,7 @@ def recog(args):
         with torch.no_grad():
             for names in grouper(args.batchsize, keys, None):
                 names = [name for name in names if name]
-                batch = [(name, senone_js[name]) for name in names]
+                batch = [(name, phn_js[name]) for name in names]
                 feats = load_inputs_and_targets(batch)[0] if args.num_encs == 1 else load_inputs_and_targets(batch)
                 if args.streaming_mode == 'window' and args.num_encs == 1:
                     raise NotImplementedError
@@ -816,13 +816,13 @@ def recog(args):
                                 nbest_hyps[n]['score'] += hyps[n]['score']
                     nbest_hyps = [nbest_hyps]
                 else:
-                    senone_nbest_hyps = model.recognize_batch(feats, args, train_args.senone_list, rnnlm=rnnlm, trans_type = "senone")
+                    # senone_nbest_hyps = model.recognize_batch(feats, args, train_args.senone_list, rnnlm=rnnlm, trans_type = "senone")
                     phn_nbest_hyps = model.recognize_batch(feats, args, train_args.phn_list, rnnlm=rnnlm, trans_type = "phn")
                     char_nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm, trans_type = "char")
 
-                for i, nbest_hyp in enumerate(senone_nbest_hyps):
-                    name = names[i]
-                    new_senone_js[name] = add_results_to_json(senone_js[name], nbest_hyp, train_args.senone_list)
+                # for i, nbest_hyp in enumerate(senone_nbest_hyps):
+                #     name = names[i]
+                #     new_senone_js[name] = add_results_to_json(senone_js[name], nbest_hyp, train_args.senone_list)
 
                 for i, nbest_hyp in enumerate(phn_nbest_hyps):
                     name = names[i]
@@ -832,8 +832,14 @@ def recog(args):
                     name = names[i]
                     new_char_js[name] = add_results_to_json(char_js[name], nbest_hyp, train_args.char_list)
 
-    with open(args.result_label, 'wb') as f:
-        f.write(json.dumps({'utts': new_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
+    # with open(args.senone_result_label, 'wb') as f:
+    #     f.write(json.dumps({'utts': new_senone_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
+
+    with open(args.phn_result_label, 'wb') as f:
+        f.write(json.dumps({'utts': new_phn_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
+    
+    with open(args.char_result_label, 'wb') as f:
+        f.write(json.dumps({'utts': new_char_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
 
 
 def enhance(args):

@@ -63,8 +63,6 @@ def get_parser():
                         help='Filename of recognition data (json)')
     parser.add_argument('--recog-char-json', type=str,
                         help='Filename of recognition data (json)')
-    parser.add_argument('--result-label', type=str, required=True,
-                        help='Filename of result label data (json)')
     parser.add_argument('--senone-result-label', type=str, required=True,
                         help='Filename of result label data (json)')
     parser.add_argument('--phn-result-label', type=str, required=True,

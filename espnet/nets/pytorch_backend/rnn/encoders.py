@@ -48,7 +48,7 @@ class RNNP(torch.nn.Module):
         self.typ = typ
         self.bidir = bidir
 
-    def forward(self, xs_pad, ilens, prev_state=None, tap_layer=None):
+    def forward(self, xs_pad, ilens, prev_state=None):
         """RNNP forward
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -59,6 +59,8 @@ class RNNP(torch.nn.Module):
         """
         # logging.info(self.__class__.__name__ + ' input lengths: ' + str(ilens))
         elayer_states = []
+        xspad_layers = []
+        ilens_layers = []
         for layer in six.moves.range(self.elayers):
             xs_pack = pack_padded_sequence(xs_pad, ilens, batch_first=True)
             rnn = getattr(self, ("birnn" if self.bidir else "rnn") + str(layer))
@@ -76,18 +78,13 @@ class RNNP(torch.nn.Module):
             # (sum _utt frame_utt) x dim
             projected = getattr(self, 'bt' + str(layer)
                                 )(ys_pad.contiguous().view(-1, ys_pad.size(2)))
-
-            if(tap_layer is not None and layer == tap_layer):
-                logging.info("Tapping encoder output at layer {0}".format(str(layer)))
-                xs_pad = projected.view(ys_pad.size(0), ys_pad.size(1), -1)
-                return xs_pad, ilens, elayer_states
-
             if layer == self.elayers - 1:
                 xs_pad = projected.view(ys_pad.size(0), ys_pad.size(1), -1)
             else:
                 xs_pad = torch.tanh(projected.view(ys_pad.size(0), ys_pad.size(1), -1))
-
-        return xs_pad, ilens, elayer_states  # x: utt list of frame x dim
+            xspad_layers.append(xs_pad)
+            ilens_layers.append(ilens)
+        return xspad_layers, ilens_layers, elayer_states  # x: utt list of frame x dim
 
 
 class RNN(torch.nn.Module):
@@ -247,7 +244,7 @@ class Encoder(torch.nn.Module):
                 self.enc = torch.nn.ModuleList([RNN(idim, elayers, eunits, eprojs, dropout, typ=typ)])
                 logging.info(typ.upper() + ' without projection for encoder')
 
-    def forward(self, xs_pad, ilens, prev_states=None, tap_layer=None):
+    def forward(self, xs_pad, ilens, prev_states=None):
         """Encoder forward
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, D)
@@ -262,13 +259,14 @@ class Encoder(torch.nn.Module):
 
         current_states = []
         for module, prev_state in zip(self.enc, prev_states):
-            xs_pad, ilens, states = module(xs_pad, ilens, prev_state=prev_state, tap_layer = tap_layer)
+            xs_pad, ilens, states = module(xs_pad, ilens, prev_state=prev_state)
             current_states.append(states)
 
         # make mask to remove bias value in padded part
-        mask = to_device(self, make_pad_mask(ilens).unsqueeze(-1))
+        mask = [to_device(self, make_pad_mask(ilen).unsqueeze(-1)) for ilen in ilens]
 
-        return xs_pad.masked_fill(mask, 0.0), ilens, current_states
+        xs_pad = [ele.masked_fill(mask[i], 0.0) for i,ele in enumerate(xs_pad)]
+        return xs_pad, ilens, current_states
 
 
 def encoder_for(args, idim, subsample):
