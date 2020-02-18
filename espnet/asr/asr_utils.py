@@ -96,7 +96,7 @@ class PlotAttentionReport(extension.Extension):
     """
 
     def __init__(self, att_vis_fn, data, outdir, converter, transform, device, reverse=False,
-                 ikey="input", iaxis=0, okey="output", oaxis=0, decoder_id=2):
+                 ikey="input", iaxis=0, okey="output", oaxis=0, decoder_id=2, uttids=None):
         self.att_vis_fn = att_vis_fn
         self.data = copy.deepcopy(data)
         self.outdir = outdir
@@ -120,28 +120,28 @@ class PlotAttentionReport(extension.Extension):
             # atts
             for i in range(num_encs):
                 for idx, att_w in enumerate(att_ws[i]):
-                    filename = "%s/%s.ep.{.updater.epoch}.att%d.png" % (
+                    filename = "%s/%s.ep.{.updater.iteration}.att%d.png" % (
                         self.outdir, self.data[idx][0], i + 1)
                     att_w = self.get_attention_weight(idx, att_w, self.decoder_id)
-                    np_filename = "%s/%s.ep.{.updater.epoch}.att%d.npy" % (
+                    np_filename = "%s/%s.ep.{.updater.iteration}.att%d.npy" % (
                         self.outdir, self.data[idx][0], i + 1)
                     np.save(np_filename.format(trainer), att_w)
                     self._plot_and_save_attention(att_w, filename.format(trainer))
             # han
             for idx, att_w in enumerate(att_ws[num_encs]):
-                filename = "%s/%s.ep.{.updater.epoch}.han.png" % (
+                filename = "%s/%s.ep.{.updater.iteration}.han.png" % (
                     self.outdir, self.data[idx][0])
                 att_w = self.get_attention_weight(idx, att_w, self.decoder_id)
-                np_filename = "%s/%s.ep.{.updater.epoch}.han.npy" % (
+                np_filename = "%s/%s.ep.{.updater.iteration}.han.npy" % (
                     self.outdir, self.data[idx][0])
                 np.save(np_filename.format(trainer), att_w)
                 self._plot_and_save_attention(att_w, filename.format(trainer), han_mode=True)
         else:
             for idx, att_w in enumerate(att_ws):
-                filename = "%s/%s.ep.{.updater.epoch}.png" % (
+                filename = "%s/%s.ep.{.updater.iteration}.png" % (
                     self.outdir, self.data[idx][0])
                 att_w = self.get_attention_weight(idx, att_w, self.decoder_id)
-                np_filename = "%s/%s.ep.{.updater.epoch}.npy" % (
+                np_filename = "%s/%s.ep.{.updater.iteration}.npy" % (
                     self.outdir, self.data[idx][0])
                 np.save(np_filename.format(trainer), att_w)
                 self._plot_and_save_attention(att_w, filename.format(trainer))
@@ -189,6 +189,7 @@ class PlotAttentionReport(extension.Extension):
 
         """
         batch = self.converter([self.transform(self.data)], self.device)
+        logging.info("decoder_id= "+str(self.decoder_id))
         if isinstance(batch, tuple):
             att_ws = self.att_vis_fn(*batch, decoder_id=self.decoder_id)
         else:

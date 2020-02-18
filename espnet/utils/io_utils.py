@@ -171,7 +171,7 @@ class LoadInputsAndTargets(object):
                         return_batch[x_name], uttid_list, **self.preprocess_args)
 
         # Doesn't return the names now.
-        return tuple(return_batch.values())
+        return tuple(return_batch.values()), uttid_list
 
     def _create_batch_asr(self, x_feats_dict, y_feats_dict, uttid_list):
         """Create a OrderedDict for the mini-batch

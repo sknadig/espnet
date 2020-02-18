@@ -94,6 +94,22 @@ def get_parser(parser=None, required=True):
                         help='Multitask learning coefficient, alpha: alpha*ctc_loss + (1-alpha)*att_loss ')
     parser.add_argument('--lsm-weight', default=0.0, type=float,
                         help='Label smoothing weight')
+    
+    #ORACLE
+    parser.add_argument('--oracle-stop', default=40, type=int,
+                        help='Till how many epochs ORACLE loss should be included for training')
+    parser.add_argument('--alignment-type', default='square', type=str,
+                        choices=['square', 'impulse', 'gaussian'],
+                        help='What kind of ORACLE alignment to use.')
+    parser.add_argument('--alignment-loss-type', default='sinkhorn', type=str,
+                        choices=['sinkhorn', 'kld', 'cosine'],
+                        help='What kind of ORACLE alignment loss to use.')
+    parser.add_argument('--oracle-w', default=0.5, type=float,
+                        help='ORACLE loss weight')
+    parser.add_argument('--oracle-w-decay', default=False, type=strtobool,
+                        help='Whether to use an exponential decay for ORACLE loss or not.')
+
+                        
     # recognition options to compute CER/WER
     parser.add_argument('--report-cer', default=False, action='store_true',
                         help='Compute CER on development set')

@@ -24,12 +24,19 @@ maxlen-out: 150 # if output length > maxlen_out, batchsize is automatically redu
 
 # optimization related
 opt: adadelta
-epochs: 40
+epochs: 1
 patience: 3
 
 # scheduled sampling option
 sampling-probability: 0.2
 dropout-rate: 0.2
 
-tap-enc-senone: 0
-tap-enc-phn: 0
+tap-enc-senone: 1
+tap-enc-phn: 2
+
+oracle-w: 1.0
+oracle-stop: 40
+
+oracle-w-decay: False
+alignment-type: square
+alignment-loss-type: cosine

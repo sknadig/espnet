@@ -55,6 +55,7 @@ from espnet.utils.training.iterators import ShufflingEnabler
 from espnet.utils.training.tensorboard_logger import TensorboardLogger
 from espnet.utils.training.train_utils import check_early_stop
 from espnet.utils.training.train_utils import set_early_stop
+from espnet.utils.training.epoch_store import EpochStore
 
 import matplotlib
 matplotlib.use('Agg')
@@ -254,7 +255,7 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0]
+        (xs, ys), uttids = batch[0]
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -290,10 +291,10 @@ class CustomConverter(object):
         logging.info("asr DEBUG: ys_pad0" + str(ys_pad0.size()))
         logging.info("asr DEBUG: ys_pad1" + str(ys_pad1.size()))
         logging.info("asr DEBUG: ys_pad2" + str(ys_pad2.size()))
-        
+        logging.info("uttids DEBUG: " + str(" ".join(uttids)))
         ys_pad = [ys_pad0, ys_pad1, ys_pad2]
 
-        return xs_pad, ilens, ys_pad
+        return xs_pad, ilens, ys_pad, uttids
 
 
 class CustomConverterMulEnc(object):
@@ -394,11 +395,13 @@ def train(args):
         mtl_mode = 'mtl'
         logging.info('Multitask learning mode')
 
+    epoch_store = EpochStore(epoch=0)
+
     if (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
         model = load_trained_modules(idim_list[0], odim_list, args)
     else:
         model_class = dynamic_import(args.model_module)
-        model = model_class(idim_list[0] if args.num_encs == 1 else idim_list, odim_list, args)
+        model = model_class(idim_list[0] if args.num_encs == 1 else idim_list, odim_list, args, epoch_store = epoch_store)
     assert isinstance(model, ASRInterface)
 
     if args.rnnlm is not None:
@@ -568,13 +571,27 @@ def train(args):
         att_reporter1 = plot_class(
             att_vis_fn, data, args.outdir + "/att_ws_phn",
             converter=converter, transform=load_cv, device=device, decoder_id=1)
-        att_reporter2 = plot_class(
-            att_vis_fn, data, args.outdir + "/att_ws_char",
-            converter=converter, transform=load_cv, device=device, decoder_id=2)
-        
+        # att_reporter2 = plot_class(
+        #     att_vis_fn, data, args.outdir + "/att_ws_char",
+        #     converter=converter, transform=load_cv, device=device, decoder_id=2)
+
+        # att_reporter_iter_senone = plot_class(
+        #     att_vis_fn, data, args.outdir + "/att_ws_iter_senone",
+        #     converter=converter, transform=load_cv, device=device, decoder_id=0)
+        att_reporter_iter_phn = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws_iter_phn",
+            converter=converter, transform=load_cv, device=device, decoder_id=1)
+        # att_reporter_iter_char = plot_class(
+        #     att_vis_fn, data, args.outdir + "/att_ws_iter_char",
+        #     converter=converter, transform=load_cv, device=device, decoder_id=2)
+
         # trainer.extend(att_reporter0, trigger=(1, 'epoch'))
         trainer.extend(att_reporter1, trigger=(1, 'epoch'))
-        trainer.extend(att_reporter2, trigger=(1, 'epoch'))
+        # trainer.extend(att_reporter2, trigger=(1, 'epoch'))
+
+        # trainer.extend(att_reporter_iter_senone, trigger=(1, 'iteration'))
+        trainer.extend(att_reporter_iter_phn, trigger=(1, 'iteration'))
+        # trainer.extend(att_reporter_iter_char, trigger=(1, 'iteration'))
     else:
         att_reporter = None
 
@@ -654,11 +671,11 @@ def train(args):
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
         # trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter0, decoder_id=0),
-                    #    trigger=(args.report_interval_iters, "iteration"))
+        #                trigger=(args.report_interval_iters, "iteration"))
         trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter1, decoder_id=1),
                        trigger=(args.report_interval_iters, "iteration"))
-        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter2, decoder_id=2),
-                       trigger=(args.report_interval_iters, "iteration"))
+        # trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter2, decoder_id=2),
+        #                trigger=(args.report_interval_iters, "iteration"))
     # Run the training
     trainer.run()
     check_early_stop(trainer, args.epochs)
@@ -782,7 +799,7 @@ def recog(args):
         # sort data if batchsize > 1
         keys = list(phn_js.keys())
         if args.batchsize > 1:
-            feat_lens = [js[key]['input'][0]['shape'][0] for key in keys]
+            feat_lens = [phn_js[key]['input'][0]['shape'][0] for key in keys]
             sorted_index = sorted(range(len(feat_lens)), key=lambda i: -feat_lens[i])
             keys = [keys[i] for i in sorted_index]
 
@@ -790,7 +807,7 @@ def recog(args):
             for names in grouper(args.batchsize, keys, None):
                 names = [name for name in names if name]
                 batch = [(name, phn_js[name]) for name in names]
-                feats = load_inputs_and_targets(batch)[0] if args.num_encs == 1 else load_inputs_and_targets(batch)
+                feats = load_inputs_and_targets(batch)[0][0] if args.num_encs == 1 else load_inputs_and_targets(batch)
                 if args.streaming_mode == 'window' and args.num_encs == 1:
                     raise NotImplementedError
                 elif args.streaming_mode == 'segment' and args.num_encs == 1:
@@ -818,7 +835,7 @@ def recog(args):
                 else:
                     # senone_nbest_hyps = model.recognize_batch(feats, args, train_args.senone_list, rnnlm=rnnlm, trans_type = "senone")
                     phn_nbest_hyps = model.recognize_batch(feats, args, train_args.phn_list, rnnlm=rnnlm, trans_type = "phn")
-                    char_nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm, trans_type = "char")
+                    # char_nbest_hyps = model.recognize_batch(feats, args, train_args.char_list, rnnlm=rnnlm, trans_type = "char")
 
                 # for i, nbest_hyp in enumerate(senone_nbest_hyps):
                 #     name = names[i]
@@ -828,9 +845,9 @@ def recog(args):
                     name = names[i]
                     new_phn_js[name] = add_results_to_json(phn_js[name], nbest_hyp, train_args.phn_list)
 
-                for i, nbest_hyp in enumerate(char_nbest_hyps):
-                    name = names[i]
-                    new_char_js[name] = add_results_to_json(char_js[name], nbest_hyp, train_args.char_list)
+                # for i, nbest_hyp in enumerate(char_nbest_hyps):
+                #     name = names[i]
+                #     new_char_js[name] = add_results_to_json(char_js[name], nbest_hyp, train_args.char_list)
 
     # with open(args.senone_result_label, 'wb') as f:
     #     f.write(json.dumps({'utts': new_senone_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
@@ -838,8 +855,8 @@ def recog(args):
     with open(args.phn_result_label, 'wb') as f:
         f.write(json.dumps({'utts': new_phn_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
     
-    with open(args.char_result_label, 'wb') as f:
-        f.write(json.dumps({'utts': new_char_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
+    # with open(args.char_result_label, 'wb') as f:
+    #     f.write(json.dumps({'utts': new_char_js}, indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
 
 
 def enhance(args):
