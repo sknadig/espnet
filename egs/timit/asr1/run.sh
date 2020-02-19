@@ -51,7 +51,7 @@ if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
         local/timit_format_data.sh ${trans_type}
     done;
     for x in train test dev; do
-        cp ~/MS/kaldi/egs/timit/s5/exp/tri3_ali_$x/$x.text.senone.uniq ./data/$x/text.senone
+        cp local/$x.text.senone ./data/$x/text.senone
     done
 fi
 
@@ -202,17 +202,17 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
             --model ${expdir}/results/${recog_model} \
 	        --batchsize ${batchsize}
 
-            # concatjson.py ${expdir}/${decode_dir}/senones/data_*.json > ${expdir}/${decode_dir}/senones/data.json
+            concatjson.py ${expdir}/${decode_dir}/senones/data_*.json > ${expdir}/${decode_dir}/senones/data.json
             concatjson.py ${expdir}/${decode_dir}/phns/data_*.json > ${expdir}/${decode_dir}/phns/data.json
-            # concatjson.py ${expdir}/${decode_dir}/chars/data_*.json > ${expdir}/${decode_dir}/chars/data.json
+            concatjson.py ${expdir}/${decode_dir}/chars/data_*.json > ${expdir}/${decode_dir}/chars/data.json
 
-            # json2trn.py ${expdir}/${decode_dir}/senones/data.json data/lang_1char/${train_set}_units.senone.txt --refs ${expdir}/${decode_dir}/senones/ref.trn --hyps ${expdir}/${decode_dir}/senones/hyp.trn
+            json2trn.py ${expdir}/${decode_dir}/senones/data.json data/lang_1char/${train_set}_units.senone.txt --refs ${expdir}/${decode_dir}/senones/ref.trn --hyps ${expdir}/${decode_dir}/senones/hyp.trn
             json2trn.py ${expdir}/${decode_dir}/phns/data.json data/lang_1char/${train_set}_units.phn.txt --refs ${expdir}/${decode_dir}/phns/ref.trn --hyps ${expdir}/${decode_dir}/phns/hyp.trn
-            # json2trn.py ${expdir}/${decode_dir}/chars/data.json data/lang_1char/${train_set}_units.char.txt --refs ${expdir}/${decode_dir}/chars/ref.trn --hyps ${expdir}/${decode_dir}/chars/hyp.trn
+            json2trn.py ${expdir}/${decode_dir}/chars/data.json data/lang_1char/${train_set}_units.char.txt --refs ${expdir}/${decode_dir}/chars/ref.trn --hyps ${expdir}/${decode_dir}/chars/hyp.trn
 
-            # sclite -r ${expdir}/${decode_dir}/senones/ref.trn -h ${expdir}/${decode_dir}/senones/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/senones/results.txt
+            sclite -r ${expdir}/${decode_dir}/senones/ref.trn -h ${expdir}/${decode_dir}/senones/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/senones/results.txt
             sclite -r ${expdir}/${decode_dir}/phns/ref.trn -h ${expdir}/${decode_dir}/phns/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/phns/results.txt
-            # sclite -r ${expdir}/${decode_dir}/chars/ref.trn -h ${expdir}/${decode_dir}/chars/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/chars/results.txt
+            sclite -r ${expdir}/${decode_dir}/chars/ref.trn -h ${expdir}/${decode_dir}/chars/hyp.trn -i rm -C det -o all stdout > ${expdir}/${decode_dir}/chars/results.txt
             
         ) &
     done

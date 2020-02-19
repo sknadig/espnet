@@ -15,8 +15,6 @@ from espnet.nets.ctc_prefix_score import CTCPrefixScoreTH
 from espnet.nets.e2e_asr_common import end_detect
 
 from espnet.nets.pytorch_backend.rnn.attentions import att_to_numpy
-from espnet.nets.pytorch_backend.rnn.attention_oracle import OracleAtt
-from geomloss import SamplesLoss
 
 from espnet.nets.pytorch_backend.nets_utils import mask_by_length
 from espnet.nets.pytorch_backend.nets_utils import pad_list
@@ -49,9 +47,9 @@ class Decoder(torch.nn.Module, ScorerInterface):
     :param float replace_sos: use for multilingual (speech/text) translation
     """
 
-    def __init__(self, args, eprojs, odim, dtype, dlayers, dunits, sos, eos, att, verbose=0,
+    def __init__(self, eprojs, odim, dtype, dlayers, dunits, sos, eos, att, verbose=0,
                  char_list=None, labeldist=None, lsm_weight=0., sampling_probability=0.0,
-                 dropout=0.0, context_residual=False, replace_sos=False, num_encs=1, epoch_store=None):
+                 dropout=0.0, context_residual=False, replace_sos=False, num_encs=1):
 
         torch.nn.Module.__init__(self)
         self.dtype = dtype
@@ -101,23 +99,6 @@ class Decoder(torch.nn.Module, ScorerInterface):
 
         self.logzero = -10000000000.0
 
-        self.oracle_phn = OracleAtt(gt_pkl="/home/neo/MS/kaldi/egs/timit/s5/exp/tri3_frame_level_monophone_alignment.pkl", alignment_type=args.alignment_type)
-        self.oracle_senone = OracleAtt(gt_pkl="/home/neo/MS/kaldi/egs/timit/s5/exp/tri3_frame_level_senone_alignment.pkl", alignment_type=args.alignment_type)
-        self.epoch_store = epoch_store
-        self.oracle_stop = int(args.oracle_stop)
-        self.alignment_loss_type = args.alignment_loss_type
-        #self.sink_horn_loss = SinkhornDistance(eps=1e-6, max_iter=100, reduction=None)
-        if(self.alignment_loss_type == "sinkhorn"):
-            self.alignment_loss = SamplesLoss(p=2, blur=0.01) 
-        elif(self.alignment_loss_type == "kld"):
-            self.alignment_loss = torch.nn.KLDivLoss()
-        elif(self.alignment_loss_type == "cosine"):
-            self.alignment_loss = torch.nn.CosineSimilarity(dim=2)
-        else:
-            logging.info("ERROR! Please define a correct alignment loss type")
-            exit()
-        logging.info("Using alignment loss type: " + str(self.alignment_loss_type) + " " + str(self.alignment_loss))
-
     def zero_state(self, hs_pad):
         return hs_pad.new_zeros(hs_pad.size(0), self.dunits)
 
@@ -132,20 +113,8 @@ class Decoder(torch.nn.Module, ScorerInterface):
             for l in six.moves.range(1, self.dlayers):
                 z_list[l] = self.decoder[l](self.dropout_dec[l - 1](z_list[l - 1]), z_prev[l])
         return z_list, c_list
-    
-    def plot_att(self, atts_w, atts_w_oracle, uttids, name="w"):
-        fig, ax = plt.subplots(2, len(uttids))
-        atts_w_oracle = np.swapaxes(atts_w_oracle, 0, 1)
-        atts_w = np.swapaxes(atts_w, 0, 1)
-        for i in range(len(uttids)):
-            ax[0].imshow(atts_w[i], cmap='gray')
-            ax[1].imshow(atts_w_oracle[i], cmap='gray')
-        
-        fig.tight_layout()
-        plt.savefig("/home/neo/MS/espnet/egs/timit/asr1/att_ws/att_oracle_{0}.png".format(name), bbox_inches='tight', dpi=300)
-        plt.close()
 
-    def forward(self, hs_pad, hlens, ys_pad, strm_idx=0, lang_ids=None, uttids=None, target=None):
+    def forward(self, hs_pad, hlens, ys_pad, strm_idx=0, lang_ids=None):
         """Decoder forward
 
         :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
@@ -217,36 +186,11 @@ class Decoder(torch.nn.Module, ScorerInterface):
 
         # pre-computation of embedding
         eys = self.dropout_emb(self.embed(ys_in_pad))  # utt x olen x zdim
-        atts_w_oracle = []
-        atts_w  = []
+
         # loop for an output sequence
         for i in six.moves.range(olength):
             if self.num_encs == 1:
                 att_c, att_w = self.att[att_idx](hs_pad[0], hlens[0], self.dropout_dec[0](z_list[0]), att_w)
-                ep = self.epoch_store.get_epoch()
-                att_w_oracle = att_w
-                if (target == "phn"):
-                    if(uttids is not None and ep < self.oracle_stop):
-                        logging.info("Phoneme Decoder uttids: " + str(uttids))
-                        logging.info("Phoneme ORACLE UPDATE: epoch {0}, so updating with ORACLE loss".format(str(ep)))
-                        att_w_oracle = self.oracle_phn(att_w, uttids, i)
-                        att_w_oracle = to_device(self, att_w_oracle)
-                        # att_w_oracle = att_w * att_w_oracle
-                    else:
-                        logging.info("Phoneme NO ORACLE UPDATE: epoch {0}, not updating with ORACLE loss".format(str(ep)))
-                elif (target == "senone"):
-                    if(uttids is not None and ep < self.oracle_stop):
-                        logging.info("Senone Decoder uttids: " + str(uttids))
-                        logging.info("Senone ORACLE UPDATE: epoch {0}, so updating with ORACLE loss".format(str(ep)))
-                        att_w_oracle = self.oracle_senone(att_w, uttids, i)
-                        att_w_oracle = to_device(self, att_w_oracle)
-                        # att_w_oracle = att_w * att_w_oracle
-                    else:
-                        logging.info("Senone NO ORACLE UPDATE: epoch {0}, not updating with ORACLE loss".format(str(ep)))
-                else:
-                    logging.info("Not phn/senone target, so not calculating ORACLE loss")
-                atts_w.append(att_w)
-                atts_w_oracle.append(att_w_oracle)
             else:
                 for idx in range(self.num_encs):
                     att_c_list[idx], att_w_list[idx] = self.att[idx](hs_pad[idx], hlens[idx],
@@ -287,30 +231,6 @@ class Decoder(torch.nn.Module, ScorerInterface):
         acc = th_accuracy(y_all, ys_out_pad, ignore_label=self.ignore_id)
         logging.info('att loss:' + ''.join(str(self.loss.item()).split('\n')))
 
-
-        atts_w = torch.stack(atts_w)
-        atts_w_oracle = torch.stack(atts_w_oracle)
-        atts_w_oracle = F.softmax(2 * atts_w_oracle, dim=2)
-        logging.info("Normal att_w shape: " + str(atts_w.size()))
-        logging.info("ORACLE att_w shape: " + str(atts_w_oracle.size()))
-        atts_w_oracle = atts_w_oracle.to("cpu")
-        atts_w = atts_w.to("cpu")
-
-        if(self.alignment_loss_type == "cosine"):
-            self.oracle_loss = self.alignment_loss(atts_w, atts_w_oracle)
-            self.oracle_loss = 1 - self.oracle_loss
-        elif(self.alignment_loss_type == "sinkhorn"):
-            atts_w = atts_w.reshape(1, -1)
-            atts_w_oracle = atts_w_oracle.reshape(1, -1)
-            self.oracle_loss = self.alignment_loss(atts_w, atts_w_oracle) / 0.5
-        elif(self.alignment_loss_type == "kld"):
-            self.oracle_loss = self.alignment_loss(torch.log(F.softmax(atts_w, dim=2)), F.softmax(atts_w_oracle, dim=2)) / 10**-7
-
-        self.oracle_loss = torch.sum(self.oracle_loss)
-        self.oracle_loss = to_device(self, self.oracle_loss)
-        # self.oracle_loss *= (np.mean([len(x) for x in ys_in]) - 1)
-        logging.info("oracle loss: " + str(self.oracle_loss))
-
         # show predicted character sequence for debug
         if self.verbose > 0 and self.char_list is not None:
             ys_hat = y_all.view(batch, olength, -1)
@@ -334,7 +254,7 @@ class Decoder(torch.nn.Module, ScorerInterface):
             loss_reg = - torch.sum((F.log_softmax(y_all, dim=1) * self.vlabeldist).view(-1), dim=0) / len(ys_in)
             self.loss = (1. - self.lsm_weight) * self.loss + self.lsm_weight * loss_reg
 
-        return self.loss, self.oracle_loss, acc, ppl
+        return self.loss, acc, ppl
 
     def recognize_beam(self, h, lpz, recog_args, char_list, rnnlm=None, strm_idx=0):
         """beam search implementation
@@ -743,7 +663,7 @@ class Decoder(torch.nn.Module, ScorerInterface):
             c_prev = [torch.index_select(c_list[li].view(n_bb, -1), 0, vidx) for li in range(self.dlayers)]
 
             # pick ended hyps
-            if i > minlen:
+            if i >= minlen:
                 k = 0
                 penalty_i = (i + 1) * penalty
                 thr = accum_best_scores[:, -1]
@@ -752,15 +672,20 @@ class Decoder(torch.nn.Module, ScorerInterface):
                         k = k + beam
                         continue
                     for beam_j in six.moves.range(beam):
+                        _vscore = None
                         if eos_vscores[samp_i, beam_j] > thr[samp_i]:
                             yk = y_prev[k][:]
-                            yk.append(self.eos)
-                            if len(yk) < min(hlens[idx][samp_i] for idx in range(self.num_encs)):
+                            if len(yk) <= min(hlens[idx][samp_i] for idx in range(self.num_encs)):
                                 _vscore = eos_vscores[samp_i][beam_j] + penalty_i
-                                if rnnlm:
-                                    _vscore += recog_args.lm_weight * rnnlm.final(rnnlm_state, index=k)
-                                _score = _vscore.data.cpu().numpy()
-                                ended_hyps[samp_i].append({'yseq': yk, 'vscore': _vscore, 'score': _score})
+                        elif i == maxlen - 1:
+                            yk = yseq[k][:]
+                            _vscore = vscores[samp_i][beam_j] + penalty_i
+                        if _vscore:
+                            yk.append(self.eos)
+                            if rnnlm:
+                                _vscore += recog_args.lm_weight * rnnlm.final(rnnlm_state, index=k)
+                            _score = _vscore.data.cpu().numpy()
+                            ended_hyps[samp_i].append({'yseq': yk, 'vscore': _vscore, 'score': _score})
                         k = k + 1
 
             # end detection
@@ -979,11 +904,10 @@ class Decoder(torch.nn.Module, ScorerInterface):
         return logp, dict(c_prev=c_list[:], z_prev=z_list[:], a_prev=att_w, workspace=(att_idx, z_list, c_list))
 
 
-def decoder_for(args, odim, sos, eos, att, labeldist, symbol_list, epoch_store=None):
-    return Decoder(args, args.eprojs, odim, args.dtype, args.dlayers, args.dunits, sos, eos, att, args.verbose,
-                   symbol_list, labeldist,
+def decoder_for(args, odim, sos, eos, att, labeldist, char_list):
+    return Decoder(args.eprojs, odim, args.dtype, args.dlayers, args.dunits, sos, eos, att, args.verbose,
+                   char_list, labeldist,
                    args.lsm_weight, args.sampling_probability, args.dropout_rate_decoder,
                    getattr(args, "context_residual", False),  # use getattr to keep compatibility
                    getattr(args, "replace_sos", False),  # use getattr to keep compatibility
-                   getattr(args, "num_encs", 1),
-                   epoch_store)  # use getattr to keep compatibility
+                   getattr(args, "num_encs", 1))  # use getattr to keep compatibility

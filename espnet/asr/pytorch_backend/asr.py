@@ -565,32 +565,32 @@ def train(args):
         else:
             att_vis_fn = model.calculate_all_attentions
             plot_class = model.attention_plot_class
-        # att_reporter0 = plot_class(
-        #     att_vis_fn, data, args.outdir + "/att_ws_senone",
-        #     converter=converter, transform=load_cv, device=device, decoder_id=0)
+        att_reporter0 = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws_senone",
+            converter=converter, transform=load_cv, device=device, decoder_id=0)
         att_reporter1 = plot_class(
             att_vis_fn, data, args.outdir + "/att_ws_phn",
             converter=converter, transform=load_cv, device=device, decoder_id=1)
-        # att_reporter2 = plot_class(
-        #     att_vis_fn, data, args.outdir + "/att_ws_char",
-        #     converter=converter, transform=load_cv, device=device, decoder_id=2)
+        att_reporter2 = plot_class(
+            att_vis_fn, data, args.outdir + "/att_ws_char",
+            converter=converter, transform=load_cv, device=device, decoder_id=2)
 
         # att_reporter_iter_senone = plot_class(
         #     att_vis_fn, data, args.outdir + "/att_ws_iter_senone",
         #     converter=converter, transform=load_cv, device=device, decoder_id=0)
-        att_reporter_iter_phn = plot_class(
-            att_vis_fn, data, args.outdir + "/att_ws_iter_phn",
-            converter=converter, transform=load_cv, device=device, decoder_id=1)
+        # att_reporter_iter_phn = plot_class(
+        #     att_vis_fn, data, args.outdir + "/att_ws_iter_phn",
+        #     converter=converter, transform=load_cv, device=device, decoder_id=1)
         # att_reporter_iter_char = plot_class(
         #     att_vis_fn, data, args.outdir + "/att_ws_iter_char",
         #     converter=converter, transform=load_cv, device=device, decoder_id=2)
 
-        # trainer.extend(att_reporter0, trigger=(1, 'epoch'))
+        trainer.extend(att_reporter0, trigger=(1, 'epoch'))
         trainer.extend(att_reporter1, trigger=(1, 'epoch'))
-        # trainer.extend(att_reporter2, trigger=(1, 'epoch'))
+        trainer.extend(att_reporter2, trigger=(1, 'epoch'))
 
         # trainer.extend(att_reporter_iter_senone, trigger=(1, 'iteration'))
-        trainer.extend(att_reporter_iter_phn, trigger=(1, 'iteration'))
+        # trainer.extend(att_reporter_iter_phn, trigger=(1, 'iteration'))
         # trainer.extend(att_reporter_iter_char, trigger=(1, 'iteration'))
     else:
         att_reporter = None
@@ -670,12 +670,12 @@ def train(args):
     set_early_stop(trainer, args)
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
-        # trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter0, decoder_id=0),
-        #                trigger=(args.report_interval_iters, "iteration"))
+        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter0, decoder_id=0),
+                       trigger=(args.report_interval_iters, "iteration"))
         trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter1, decoder_id=1),
                        trigger=(args.report_interval_iters, "iteration"))
-        # trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter2, decoder_id=2),
-        #                trigger=(args.report_interval_iters, "iteration"))
+        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter2, decoder_id=2),
+                       trigger=(args.report_interval_iters, "iteration"))
     # Run the training
     trainer.run()
     check_early_stop(trainer, args.epochs)
