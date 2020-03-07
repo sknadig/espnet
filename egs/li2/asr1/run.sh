@@ -1,5 +1,5 @@
 #!/bin/bash
-#Copyright 2020 IIT-Bangalore (Shreekantha Nadig)
+#Copyright 2020 IIIT-Bangalore (Shreekantha Nadig)
 #Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 . ./path.sh || exit 1;
@@ -144,7 +144,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     echo "stage 3: Combing data"
     utils/data/combine_data.sh data/train_nodev data/libri_train_clean_100/ data/cv_valid_train_fr_subset/
     utils/data/combine_data.sh data/train_dev data/libri_dev_clean/ data/cv_valid_dev_fr/
-done
+fi
 
 feat_tr_dir=${dumpdir}/${train_set}/delta${do_delta}; mkdir -p ${feat_tr_dir}
 feat_dt_dir=${dumpdir}/${train_dev}/delta${do_delta}; mkdir -p ${feat_dt_dir}
