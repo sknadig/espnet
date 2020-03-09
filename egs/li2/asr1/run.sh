@@ -48,6 +48,7 @@ use_lm_valbest_average=false # if true, the validation `lm_n_average`-best langu
 cv_datadir=downloads/cv/
 libri_datadir=downloads/libri/
 cv_lang=fr # en de fr cy tt kab ca zh-TW it fa eu es ru
+exp_lang="both"
 
 # base url for downloads.
 cv_data_url=https://voice-prod-bundler-ee1969a6ce8178826482b88e843c335139bd3fb4.s3.amazonaws.com/cv-corpus-3/${cv_lang}.tar.gz
@@ -142,8 +143,20 @@ fi
 
 if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     echo "stage 3: Combing data"
-    utils/data/combine_data.sh data/train_nodev data/libri_train_clean_100/ data/cv_valid_train_fr_subset/
-    utils/data/combine_data.sh data/train_dev data/libri_dev_clean/ data/cv_valid_dev_fr/
+    if [ $exp_lang = "both" ] then
+        utils/data/combine_data.sh data/train_nodev data/libri_train_clean_100/ data/cv_valid_train_fr_subset/
+        utils/data/combine_data.sh data/train_dev data/libri_dev_clean/ data/cv_valid_dev_fr/
+    elif [ $exp_lang = "en" ] then
+        rm -rf data/train_nodev data/train_dev
+        cp -r data/libri_train_clean_100/ data/train_nodev
+        cp -r data/libri_dev_clean/ data/train_dev
+    elif [ $exp_lang = "fr" ] then
+        rm -rf data/train_nodev data/train_dev
+        cp -r data/cv_valid_train_fr_subset/ data/train_nodev
+        cp -r data/cv_valid_dev_fr/ data/train_dev
+    else
+        echo "Wrong choice for exp_lang. It should be one of [both, en, fr]. You have given $exp_lang"
+        exit 0
 fi
 
 feat_tr_dir=${dumpdir}/${train_set}/delta${do_delta}; mkdir -p ${feat_tr_dir}
