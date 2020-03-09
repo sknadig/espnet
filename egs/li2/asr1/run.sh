@@ -148,12 +148,12 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
         utils/data/combine_data.sh data/train_dev data/libri_dev_clean/ data/cv_valid_dev_fr/
     elif [ $exp_lang = "en" ] then
         rm -rf data/train_nodev data/train_dev
-        cp -r data/libri_train_clean_100/ data/train_nodev
-        cp -r data/libri_dev_clean/ data/train_dev
+        utils/copy_data_dir.sh data/libri_train_clean_100/ data/train_nodev
+        utils/copy_data_dir.sh data/libri_dev_clean/ data/train_dev
     elif [ $exp_lang = "fr" ] then
         rm -rf data/train_nodev data/train_dev
-        cp -r data/cv_valid_train_fr_subset/ data/train_nodev
-        cp -r data/cv_valid_dev_fr/ data/train_dev
+        utils/copy_data_dir.sh data/cv_valid_train_fr_subset/ data/train_nodev
+        utils/copy_data_dir.sh data/cv_valid_dev_fr/ data/train_dev
     else
         echo "Wrong choice for exp_lang. It should be one of [both, en, fr]. You have given $exp_lang"
         exit 0
