@@ -68,7 +68,7 @@ set -o pipefail
 
 train_set=train_960
 train_dev=dev
-recog_set="test_clean test_other dev_clean dev_other"
+recog_set="test_clean dev_clean"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     echo "stage -1: Data Download"
