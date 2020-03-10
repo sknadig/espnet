@@ -54,7 +54,7 @@ data_url=www.openslr.org/resources/12
 # bpemode (unigram or bpe)
 nbpe=5000
 bpemode=unigram
-
+trans_type="phn"
 # exp tag
 tag="" # tag for managing experiments.
 
@@ -72,7 +72,7 @@ recog_set="test_clean test_other dev_clean dev_other"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     echo "stage -1: Data Download"
-    for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360 train-other-500; do
+    for part in dev-clean test-clean train-clean-100; do
         local/download_and_untar.sh ${datadir} ${data_url} ${part}
     done
 fi
@@ -81,9 +81,11 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
     ### Task dependent. You have to make data the following preparation part by yourself.
     ### But you can utilize Kaldi recipes in most cases
     echo "stage 0: Data preparation"
-    for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360 train-other-500; do
+    git clone https://github.com/sknadig/libri_phone_trans data/phone_trans/
+    for part in dev-clean test-clean train-clean-100; do
         # use underscore-separated names in data directories.
         local/data_prep.sh ${datadir}/LibriSpeech/${part} data/${part//-/_}
+        mv data/phone_trans/${part//-/_}/text data/${part//-/_}/text
     done
 fi
 
@@ -95,7 +97,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     echo "stage 1: Feature Generation"
     fbankdir=fbank
     # Generate the fbank features; by default 80-dimensional fbanks with pitch on each frame
-    for x in dev_clean test_clean dev_other test_other train_clean_100 train_clean_360 train_other_500; do
+    for x in dev_clean test_clean train_clean_100; do
         steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj ${nj} --write_utt2num_frames true \
             data/${x} exp/make_fbank/${x} ${fbankdir}
         utils/fix_data_dir.sh data/${x}
@@ -112,17 +114,6 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     # compute global CMVN
     compute-cmvn-stats scp:data/${train_set}/feats.scp data/${train_set}/cmvn.ark
 
-    # dump features for training
-    if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d ${feat_tr_dir}/storage ]; then
-    utils/create_split_dir.pl \
-        /export/b{14,15,16,17}/${USER}/espnet-data/egs/librispeech/asr1/dump/${train_set}/delta${do_delta}/storage \
-        ${feat_tr_dir}/storage
-    fi
-    if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d ${feat_dt_dir}/storage ]; then
-    utils/create_split_dir.pl \
-        /export/b{14,15,16,17}/${USER}/espnet-data/egs/librispeech/asr1/dump/${train_dev}/delta${do_delta}/storage \
-        ${feat_dt_dir}/storage
-    fi
     dump.sh --cmd "$train_cmd" --nj ${nj} --do_delta ${do_delta} \
         data/${train_set}/feats.scp data/${train_set}/cmvn.ark exp/dump_feats/train ${feat_tr_dir}
     dump.sh --cmd "$train_cmd" --nj ${nj} --do_delta ${do_delta} \
@@ -135,174 +126,88 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     done
 fi
 
-dict=data/lang_char/${train_set}_${bpemode}${nbpe}_units.txt
-bpemodel=data/lang_char/${train_set}_${bpemode}${nbpe}
+dict=data/lang_1char/${train_set}_units.txt
 echo "dictionary: ${dict}"
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
     ### Task dependent. You have to check non-linguistic symbols used in the corpus.
     echo "stage 2: Dictionary and Json Data Preparation"
-    mkdir -p data/lang_char/
+    mkdir -p data/lang_1char/
     echo "<unk> 1" > ${dict} # <unk> must be 1, 0 will be used for "blank" in CTC
-    cut -f 2- -d" " data/${train_set}/text > data/lang_char/input.txt
-    spm_train --input=data/lang_char/input.txt --vocab_size=${nbpe} --model_type=${bpemode} --model_prefix=${bpemodel} --input_sentence_size=100000000
-    spm_encode --model=${bpemodel}.model --output_format=piece < data/lang_char/input.txt | tr ' ' '\n' | sort | uniq | awk '{print $0 " " NR+1}' >> ${dict}
+    text2token.py -s 1 -n 1 data/${train_set}/text --trans_type ${trans_type} | cut -f 2- -d" " | tr " " "\n" \
+    | sort | uniq | grep -v -e '^\s*$' | awk '{print $0 " " NR+1}' >> ${dict}
     wc -l ${dict}
 
     # make json labels
-    data2json.sh --feat ${feat_tr_dir}/feats.scp --bpecode ${bpemodel}.model \
-        data/${train_set} ${dict} > ${feat_tr_dir}/data_${bpemode}${nbpe}.json
-    data2json.sh --feat ${feat_dt_dir}/feats.scp --bpecode ${bpemodel}.model \
-        data/${train_dev} ${dict} > ${feat_dt_dir}/data_${bpemode}${nbpe}.json
-
+    data2json.sh --feat ${feat_tr_dir}/feats.scp --trans_type ${trans_type} \
+    data/${train_set} ${dict} > ${feat_tr_dir}/data.json
+    data2json.sh --feat ${feat_dt_dir}/feats.scp --trans_type ${trans_type} \
+    data/${train_dev} ${dict} > ${feat_dt_dir}/data.json
     for rtask in ${recog_set}; do
         feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
-        data2json.sh --feat ${feat_recog_dir}/feats.scp --bpecode ${bpemodel}.model \
-            data/${rtask} ${dict} > ${feat_recog_dir}/data_${bpemode}${nbpe}.json
+        data2json.sh --feat ${feat_recog_dir}/feats.scp --trans_type ${trans_type} \
+        data/${rtask} ${dict} > ${feat_recog_dir}/data.json
     done
 fi
 
-# You can skip this and remove --rnnlm option in the recognition (stage 5)
-if [ -z ${lmtag} ]; then
-    lmtag=$(basename ${lm_config%.*})
-fi
-lmexpname=train_rnnlm_${backend}_${lmtag}_${bpemode}${nbpe}_ngpu${ngpu}
-lmexpdir=exp/${lmexpname}
-mkdir -p ${lmexpdir}
-
-if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
-    echo "stage 3: LM Preparation"
-    lmdatadir=data/local/lm_train_${bpemode}${nbpe}
-    # use external data
-    if [ ! -e data/local/lm_train/librispeech-lm-norm.txt.gz ]; then
-        wget http://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz -P data/local/lm_train/
-    fi
-    if [ ! -e ${lmdatadir} ]; then
-        mkdir -p ${lmdatadir}
-        cut -f 2- -d" " data/${train_set}/text | gzip -c > data/local/lm_train/${train_set}_text.gz
-        # combine external text and transcriptions and shuffle them with seed 777
-        zcat data/local/lm_train/librispeech-lm-norm.txt.gz data/local/lm_train/${train_set}_text.gz |\
-            spm_encode --model=${bpemodel}.model --output_format=piece > ${lmdatadir}/train.txt
-        cut -f 2- -d" " data/${train_dev}/text | spm_encode --model=${bpemodel}.model --output_format=piece \
-                                                            > ${lmdatadir}/valid.txt
-    fi
-    ${cuda_cmd} --gpu ${ngpu} ${lmexpdir}/train.log \
-        lm_train.py \
-        --config ${lm_config} \
-        --ngpu ${ngpu} \
-        --backend ${backend} \
-        --verbose 1 \
-        --outdir ${lmexpdir} \
-        --tensorboard-dir tensorboard/${lmexpname} \
-        --train-label ${lmdatadir}/train.txt \
-        --valid-label ${lmdatadir}/valid.txt \
-        --resume ${lm_resume} \
-        --dict ${dict} \
-        --dump-hdf5-path ${lmdatadir}
-fi
 
 if [ -z ${tag} ]; then
     expname=${train_set}_${backend}_$(basename ${train_config%.*})
     if ${do_delta}; then
         expname=${expname}_delta
     fi
-    if [ -n "${preprocess_config}" ]; then
-        expname=${expname}_$(basename ${preprocess_config%.*})
-    fi
 else
     expname=${train_set}_${backend}_${tag}
 fi
 expdir=exp/${expname}
 mkdir -p ${expdir}
-
-if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
-    echo "stage 4: Network Training"
+if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
+    echo "stage 3: Network Training"
     ${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
-        asr_train.py \
-        --config ${train_config} \
-        --preprocess-conf ${preprocess_config} \
-        --ngpu ${ngpu} \
-        --backend ${backend} \
-        --outdir ${expdir}/results \
-        --tensorboard-dir tensorboard/${expname} \
-        --debugmode ${debugmode} \
-        --dict ${dict} \
-        --debugdir ${expdir} \
-        --minibatches ${N} \
-        --verbose ${verbose} \
-        --resume ${resume} \
-        --train-json ${feat_tr_dir}/data_${bpemode}${nbpe}.json \
-        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json
+    asr_train.py \
+    --config ${train_config} \
+    --ngpu ${ngpu} \
+    --backend ${backend} \
+    --outdir ${expdir}/results \
+    --tensorboard-dir tensorboard/${expname} \
+    --debugmode ${debugmode} \
+    --dict ${dict} \
+    --debugdir ${expdir} \
+    --minibatches ${N} \
+    --verbose ${verbose} \
+    --resume ${resume} \
+    --train-json ${feat_tr_dir}/data.json \
+    --valid-json ${feat_dt_dir}/data.json
 fi
 
-if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
-    echo "stage 5: Decoding"
-    if [[ $(get_yaml.py ${train_config} model-module) = *transformer* ]]; then
-        # Average ASR models
-        if ${use_valbest_average}; then
-            recog_model=model.val${n_average}.avg.best
-            opt="--log ${expdir}/results/log"
-        else
-            recog_model=model.last${n_average}.avg.best
-            opt="--log"
-        fi
-        average_checkpoints.py \
-            ${opt} \
-            --backend ${backend} \
-            --snapshots ${expdir}/results/snapshot.ep.* \
-            --out ${expdir}/results/${recog_model} \
-            --num ${n_average}
-
-        # Average LM models
-        if [ ${lm_n_average} -eq 0 ]; then
-            lang_model=rnnlm.model.best
-        else
-            if ${use_lm_valbest_average}; then
-                lang_model=rnnlm.val${lm_n_average}.avg.best
-                opt="--log ${lmexpdir}/log"
-            else
-                lang_model=rnnlm.last${lm_n_average}.avg.best
-                opt="--log"
-            fi
-            average_checkpoints.py \
-                ${opt} \
-                --backend ${backend} \
-                --snapshots ${lmexpdir}/snapshot.ep.* \
-                --out ${lmexpdir}/${lang_model} \
-                --num ${lm_n_average}
-        fi
-    fi
-
-    pids=() # initialize pids
+if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
+    echo "stage 4: Decoding"
+    nj=8
     for rtask in ${recog_set}; do
-    (
-        decode_dir=decode_${rtask}_${recog_model}_$(basename ${decode_config%.*})_${lmtag}
-        feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
+        (
+            decode_dir=decode_${rtask}_$(basename ${decode_config%.*})
+            feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
 
-        # split data
-        splitjson.py --parts ${nj} ${feat_recog_dir}/data_${bpemode}${nbpe}.json
+            # split data
+            splitjson.py --parts ${nj} ${feat_recog_dir}/data.json
 
-        #### use CPU for decoding
-        ngpu=0
+            #### use CPU for decoding
+            ngpu=0
 
-        # set batchsize 0 to disable batch decoding
-        ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
+            ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
             asr_recog.py \
             --config ${decode_config} \
             --ngpu ${ngpu} \
             --backend ${backend} \
-            --batchsize 0 \
-            --recog-json ${feat_recog_dir}/split${nj}utt/data_${bpemode}${nbpe}.JOB.json \
+            --debugmode ${debugmode} \
+            --verbose ${verbose} \
+            --recog-json ${feat_recog_dir}/split${nj}utt/data.JOB.json \
             --result-label ${expdir}/${decode_dir}/data.JOB.json \
-            --model ${expdir}/results/${recog_model}  \
-            --rnnlm ${lmexpdir}/${lang_model} \
-            --api v2
+            --model ${expdir}/results/${recog_model}
 
-        score_sclite.sh --bpe ${nbpe} --bpemodel ${bpemodel}.model --wer true ${expdir}/${decode_dir} ${dict}
+            score_sclite.sh ${expdir}/${decode_dir} ${dict}
 
-    ) &
-    pids+=($!) # store background pids
+        ) &
     done
-    i=0; for pid in "${pids[@]}"; do wait ${pid} || ((++i)); done
-    [ ${i} -gt 0 ] && echo "$0: ${i} background jobs are failed." && false
+    wait
     echo "Finished"
 fi
