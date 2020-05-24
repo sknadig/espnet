@@ -78,7 +78,7 @@ else
     HKUST2=
     LIBRISPEECH=
     JSUT=downloads
-    TIMIT=
+    TIMIT=/home/neo/MS/TIMIT_kaldi
     VOXFORGE=downloads
     AMI=
     COMMONVOICE=downloads

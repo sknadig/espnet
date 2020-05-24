@@ -216,6 +216,7 @@ bpeprefix="${bpedir}"/model
 bpemodel="${bpeprefix}".model
 bpetoken_list="${bpedir}"/tokens.txt
 chartoken_list="${token_listdir}"/char/tokens.txt
+phntoken_list="${token_listdir}"/phn/tokens.txt
 # NOTE: keep for future development.
 # shellcheck disable=SC2034
 wordtoken_list="${token_listdir}"/word/tokens.txt
@@ -225,6 +226,8 @@ if [ "${token_type}" = bpe ]; then
 elif [ "${token_type}" = char ]; then
     token_list="${chartoken_list}"
     bpemodel=none
+elif [ "${token_type}" = phn ]; then
+    token_list="${phntoken_list}"
 else
     log "Error: not supported --token_type '${token_type}'"
     exit 2
@@ -471,6 +474,10 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
 
     elif [ "${token_type}" = char ]; then
         log "Stage 5: Generate character level token_list from ${data_feats}/srctexts"
+        _opts="--non_linguistic_symbols ${nlsyms_txt}"
+
+    elif [ "${token_type}" = phn ]; then
+        log "Stage 5: Generate phone level token_list from ${data_feats}/srctexts"
         _opts="--non_linguistic_symbols ${nlsyms_txt}"
 
     else

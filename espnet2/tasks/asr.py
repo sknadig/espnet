@@ -158,7 +158,7 @@ class ASRTask(AbsTask):
             "--token_type",
             type=str,
             default="bpe",
-            choices=["bpe", "char", "word"],
+            choices=["phn", "bpe", "char", "word"],
             help="The text will be tokenized " "in the specified level token",
         )
         group.add_argument(

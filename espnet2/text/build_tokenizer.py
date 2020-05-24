@@ -47,6 +47,15 @@ def build_tokenizer(
             remove_non_linguistic_symbols=remove_non_linguistic_symbols,
         )
 
+    elif token_type == "phn":
+        if remove_non_linguistic_symbols and non_linguistic_symbols is not None:
+            return WordTokenizer(
+                delimiter=delimiter,
+                non_linguistic_symbols=non_linguistic_symbols,
+                remove_non_linguistic_symbols=True,
+            )
+        else:
+            return WordTokenizer(delimiter=delimiter)
     else:
         raise ValueError(
             f"token_mode must be one of bpe, word, or char: " f"{token_type}"
