@@ -2,7 +2,7 @@ optim: adadelta
 init: xavier_uniform
 max_epoch: 25
 batch_type: folded
-batch_size: 30
+batch_size: 10
 optim_conf:
     lr: 1.0
     rho: 0.95
@@ -41,3 +41,6 @@ decoder_conf:
     att_conf:
         atype: location
         adim: 320
+model_conf:
+    ctc_weight: 0.5
+    lsm_weight: 0.1     # label smoothing option

@@ -210,6 +210,7 @@ class Trainer:
                     iterator=train_iter_factory.build_iter(iepoch),
                     reporter=sub_reporter,
                     options=trainer_options,
+                    epoch = iepoch,
                 )
 
             with reporter.observe("valid") as sub_reporter:
@@ -332,6 +333,7 @@ class Trainer:
         schedulers: Sequence[Optional[AbsScheduler]],
         reporter: SubReporter,
         options: TrainerOptions,
+        epoch: int,
     ) -> bool:
         assert check_argument_types()
 
@@ -380,7 +382,7 @@ class Trainer:
                 continue
 
             with reporter.measure_time("forward_time"):
-                loss, stats, weight = model(**batch)
+                loss, stats, weight = model(epoch=epoch, **batch)
             if ngpu > 1 or distributed:
                 # Apply weighted averaging for loss and stats
                 loss = (loss * weight.type(loss.dtype)).sum()
@@ -498,7 +500,7 @@ class Trainer:
                 reporter.register({})
                 continue
 
-            _, stats, weight = model(**batch)
+            _, stats, weight = model(epoch=0, **batch)
             if ngpu > 1 or distributed:
                 # Apply weighted averaging for stats.
                 # if distributed, this method can also apply all_reduce()

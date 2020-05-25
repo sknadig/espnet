@@ -16,6 +16,7 @@ asr_config=conf/train_asr.yaml
 decode_config=conf/decode_asr.yaml
 
 ./asr.sh \
+    --asr_tag "triplet_loss_no_sos_after_10e" \
     --token_type ${trans_type} \
     --train_set train \
     --dev_set dev \

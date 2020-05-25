@@ -196,12 +196,14 @@ class RNNDecoder(AbsDecoder):
         # pre-computation of embedding
         eys = self.dropout_emb(self.embed(ys_in_pad))  # utt x olen x zdim
 
+        context_vectors = []
         # loop for an output sequence
         for i in range(olength):
             if self.num_encs == 1:
                 att_c, att_w = self.att_list[att_idx](
                     hs_pad[0], hlens[0], self.dropout_dec[0](z_list[0]), att_w
                 )
+                context_vectors.append(att_c)
             else:
                 for idx in range(self.num_encs):
                     att_c_list[idx], att_w_list[idx] = self.att_list[idx](
@@ -239,7 +241,11 @@ class RNNDecoder(AbsDecoder):
         z_all.masked_fill_(
             make_pad_mask(ys_in_lens, z_all, 1), 0,
         )
-        return z_all, ys_in_lens
+        context_vectors = torch.stack(context_vectors, dim=1)
+        context_vectors.masked_fill_(
+            make_pad_mask(ys_in_lens, context_vectors, 1), 0,
+        )
+        return z_all, ys_in_lens, context_vectors
 
     def init_state(self, x):
         # to support mutiple encoder asr mode, in single encoder mode,
