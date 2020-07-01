@@ -86,9 +86,11 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     done
 fi
 
+dicts=()
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
-    for trans_type in char phn; do
+    for trans_type in phn char; do
         dict=data/lang_1char/${train_set}_units.${trans_type}.txt
+        dicts+=(${dict})
         ### Task dependent. You have to check non-linguistic symbols used in the corpus.
         echo "stage 2: Dictionary and Json Data Preparation"
         echo "dictionary: ${dict}"
@@ -135,7 +137,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     --outdir ${expdir}/results \
     --tensorboard-dir tensorboard/${expname} \
     --debugmode ${debugmode} \
-    --dict ${dict} \
+    --dicts ${dicts[@]} \
     --debugdir ${expdir} \
     --minibatches ${N} \
     --verbose ${verbose} \

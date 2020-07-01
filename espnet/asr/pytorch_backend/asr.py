@@ -231,10 +231,11 @@ class CustomConverter(object):
 
     """
 
-    def __init__(self, subsampling_factor=1, dtype=torch.float32):
+    def __init__(self, subsampling_factor=1, dtype=torch.float32, num_targets=1):
         self.subsampling_factor = subsampling_factor
         self.ignore_id = -1
         self.dtype = dtype
+        self.num_targets = num_targets
 
     def __call__(self, batch, device):
         """Transforms a batch and send it to a device.
@@ -274,10 +275,49 @@ class CustomConverter(object):
             xs_pad = pad_list([torch.from_numpy(x).float() for x in xs], 0).to(device, dtype=self.dtype)
 
         ilens = torch.from_numpy(ilens).to(device)
+        
         # NOTE: this is for multi-task learning (e.g., speech translation)
-        ys_pad = pad_list([torch.from_numpy(np.array(y[0]) if isinstance(y, tuple) else y).long()
-                           for y in ys], self.ignore_id).to(device)
+        if self.num_targets > 1:
+            # ys_pad = []
+            # for idx, y in enumerate(ys):
+            #     ys_pad.append(
+            #             pad_list(
+            #                 [
+            #                     torch.from_numpy(
+            #                         np.array(y[i])
+            #                     ).long()
+            #                 ],
+            #                 self.ignore_id,
+            #             ).to(device)
+            #             for i in range(self.num_targets)
+            #     )
+            # ys_pad = torch.stack([ele[0] for ele in ys_pad]).to(device)
 
+            ys_pad = []
+            ys_pad_tmp = [y for y in ys]
+
+            for i in range(self.num_targets):
+                ys_pad.append(pad_list(
+                    [
+                        torch.from_numpy(
+                            np.array(y[i])
+                        ).long()
+                        for y in ys_pad_tmp
+                    ],
+                    self.ignore_id,
+                ).to(device)
+                )
+        else:
+            ys_pad = pad_list(
+                [
+                    torch.from_numpy(
+                        np.array(y[0][:]) if isinstance(y, tuple) else y
+                    ).long()
+                    for y in ys
+                ],
+                self.ignore_id,
+            ).to(device)
+        # logging.info(str(ys_pad))
         return xs_pad, ilens, ys_pad
 
 
@@ -353,10 +393,10 @@ def train(args):
         valid_json = json.load(f)['utts']
     utts = list(valid_json.keys())
     idim_list = [int(valid_json[utts[0]]['input'][i]['shape'][-1]) for i in range(args.num_encs)]
-    odim = int(valid_json[utts[0]]['output'][0]['shape'][-1])
+    odim_list = [int(output[0]['shape'][-1]) for output in valid_json[utts[0]]['output']]
     for i in range(args.num_encs):
         logging.info('stream{}: input dims : {}'.format(i + 1, idim_list[i]))
-    logging.info('#output dims: ' + str(odim))
+    logging.info('#output dims: ' + str(odim_list))
 
     # specify attention, CTC, hybrid mode
     if args.mtlalpha == 1.0:
@@ -370,10 +410,10 @@ def train(args):
         logging.info('Multitask learning mode')
 
     if (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
-        model = load_trained_modules(idim_list[0], odim, args)
+        model = load_trained_modules(idim_list[0], odim_list, args)
     else:
         model_class = dynamic_import(args.model_module)
-        model = model_class(idim_list[0] if args.num_encs == 1 else idim_list, odim, args)
+        model = model_class(idim_list[0] if args.num_encs == 1 else idim_list, odim_list, args)
     assert isinstance(model, ASRInterface)
 
     if args.rnnlm is not None:
@@ -390,7 +430,7 @@ def train(args):
     model_conf = args.outdir + '/model.json'
     with open(model_conf, 'wb') as f:
         logging.info('writing a model config file to ' + model_conf)
-        f.write(json.dumps((idim_list[0] if args.num_encs == 1 else idim_list, odim, vars(args)),
+        f.write(json.dumps((idim_list[0] if args.num_encs == 1 else idim_list, odim_list, vars(args)),
                            indent=4, ensure_ascii=False, sort_keys=True).encode('utf_8'))
     for key in sorted(vars(args).keys()):
         logging.info('ARGS: ' + key + ': ' + str(vars(args)[key]))
@@ -451,9 +491,9 @@ def train(args):
 
     # Setup a converter
     if args.num_encs == 1:
-        converter = CustomConverter(subsampling_factor=model.subsample[0], dtype=dtype)
+        converter = CustomConverter(subsampling_factor=model.subsample[0], dtype=dtype, num_targets=len(odim_list))
     else:
-        converter = CustomConverterMulEnc([i[0] for i in model.subsample_list], dtype=dtype)
+        converter = CustomConverterMulEnc([i[0] for i in model.subsample_list], dtype=dtype, num_targets=len(odim_list))
 
     # read json data
     with open(args.train_json, 'rb') as f:
@@ -533,16 +573,17 @@ def train(args):
     if args.num_save_attention > 0 and args.mtlalpha != 1.0:
         data = sorted(list(valid_json.items())[:args.num_save_attention],
                       key=lambda x: int(x[1]['input'][0]['shape'][1]), reverse=True)
-        if hasattr(model, "module"):
-            att_vis_fn = model.module.calculate_all_attentions
-            plot_class = model.module.attention_plot_class
-        else:
-            att_vis_fn = model.calculate_all_attentions
-            plot_class = model.attention_plot_class
-        att_reporter = plot_class(
-            att_vis_fn, data, args.outdir + "/att_ws",
-            converter=converter, transform=load_cv, device=device)
-        trainer.extend(att_reporter, trigger=(1, 'epoch'))
+        for target_idx in range(len(odim_list)):
+            if hasattr(model, "module"):
+                att_vis_fn = model.module.calculate_all_attentions
+                plot_class = model.module.attention_plot_class
+            else:
+                att_vis_fn = model.calculate_all_attentions
+                plot_class = model.attention_plot_class
+            att_reporter = plot_class(
+                att_vis_fn, data, args.outdir + "/att_ws"+str(target_idx),
+                converter=converter, transform=load_cv, device=device, target=target_idx)
+            trainer.extend(att_reporter, trigger=(1, 'iteration'))
     else:
         att_reporter = None
 
@@ -617,7 +658,7 @@ def train(args):
     set_early_stop(trainer, args)
 
     if args.tensorboard_dir is not None and args.tensorboard_dir != "":
-        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter),
+        trainer.extend(TensorboardLogger(SummaryWriter(args.tensorboard_dir), att_reporter, num_targets=len(odim_list)),
                        trigger=(args.report_interval_iters, "iteration"))
     # Run the training
     trainer.run()

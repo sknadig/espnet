@@ -59,6 +59,8 @@ class RNNP(torch.nn.Module):
         """
         # logging.info(self.__class__.__name__ + ' input lengths: ' + str(ilens))
         elayer_states = []
+        xspad_layers = []
+        ilens_layers = []
         for layer in six.moves.range(self.elayers):
             xs_pack = pack_padded_sequence(xs_pad, ilens, batch_first=True)
             rnn = getattr(self, ("birnn" if self.bidir else "rnn") + str(layer))
@@ -80,8 +82,10 @@ class RNNP(torch.nn.Module):
                 xs_pad = projected.view(ys_pad.size(0), ys_pad.size(1), -1)
             else:
                 xs_pad = torch.tanh(projected.view(ys_pad.size(0), ys_pad.size(1), -1))
+            xspad_layers.append(torch.tanh(xs_pad))
+            ilens_layers.append(ilens)
 
-        return xs_pad, ilens, elayer_states  # x: utt list of frame x dim
+        return xspad_layers, ilens_layers, elayer_states  # x: utt list of frame x dim
 
 
 class RNN(torch.nn.Module):
@@ -260,9 +264,10 @@ class Encoder(torch.nn.Module):
             current_states.append(states)
 
         # make mask to remove bias value in padded part
-        mask = to_device(self, make_pad_mask(ilens).unsqueeze(-1))
+        mask = [to_device(self, make_pad_mask(ilen).unsqueeze(-1)) for ilen in ilens]
 
-        return xs_pad.masked_fill(mask, 0.0), ilens, current_states
+        xs_pad = [ele.masked_fill(mask[i], 0.0) for i,ele in enumerate(xs_pad)]
+        return xs_pad, ilens, current_states
 
 
 def encoder_for(args, idim, subsample):

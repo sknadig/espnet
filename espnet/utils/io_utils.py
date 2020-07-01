@@ -132,7 +132,13 @@ class LoadInputsAndTargets(object):
                     x_feats_dict.setdefault(info['output'][1]['name'], []).append(x)
 
                 for idx, inp in enumerate(info['output']):
-                    if 'tokenid' in inp:
+                    if type(inp) == list:
+                        inp = inp[0]
+                        # ======= Legacy format for output =======
+                        # {"output": [{"tokenid": "1 2 3 4"}])
+                        x = np.fromiter(map(int, inp['tokenid'].split()),
+                                        dtype=np.int64)
+                    elif 'tokenid' in inp:
                         # ======= Legacy format for output =======
                         # {"output": [{"tokenid": "1 2 3 4"}])
                         x = np.fromiter(map(int, inp['tokenid'].split()),

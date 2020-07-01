@@ -38,17 +38,25 @@ CTC_LOSS_THRESHOLD = 10000
 
 class Reporter(chainer.Chain):
     """A chainer reporter wrapper"""
-
-    def report(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
-        reporter.report({'loss_ctc': loss_ctc}, self)
-        reporter.report({'loss_att': loss_att}, self)
-        reporter.report({'acc': acc}, self)
-        reporter.report({'cer_ctc': cer_ctc}, self)
-        reporter.report({'cer': cer}, self)
-        reporter.report({'wer': wer}, self)
-        logging.info('mtl loss:' + str(mtl_loss))
-        reporter.report({'loss': mtl_loss}, self)
-
+    def report(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss, target_id):
+        if(target_id is not None):
+            reporter.report({str(target_id)+'loss_ctc': loss_ctc}, self)
+            reporter.report({str(target_id)+'loss_att': loss_att}, self)
+            reporter.report({str(target_id)+'acc': acc}, self)
+            reporter.report({str(target_id)+'cer_ctc': cer_ctc}, self)
+            reporter.report({str(target_id)+'cer': cer}, self)
+            reporter.report({str(target_id)+'wer': wer}, self)
+            logging.info(str(target_id)+'mtl loss:' + str(mtl_loss))
+            reporter.report({str(target_id)+'loss': mtl_loss}, self)
+        else:
+            reporter.report({'loss_ctc': loss_ctc}, self)
+            reporter.report({'loss_att': loss_att}, self)
+            reporter.report({'acc': acc}, self)
+            reporter.report({'cer_ctc': cer_ctc}, self)
+            reporter.report({'cer': cer}, self)
+            reporter.report({'wer': wer}, self)
+            logging.info('mtl loss:' + str(mtl_loss))
+            reporter.report({'loss': mtl_loss}, self)
 
 class E2E(ASRInterface, torch.nn.Module):
     """E2E module
@@ -80,6 +88,12 @@ class E2E(ASRInterface, torch.nn.Module):
         group.add_argument('--eprojs', default=320, type=int,
                            help='Number of encoder projection units')
         group.add_argument('--subsample', default="1", type=str,
+                           help='Subsample input frames x_y_z means subsample every x frame at 1st layer, '
+                                'every y frame at 2nd layer etc.')
+        group.add_argument('--target-taps', default="-1", type=str,
+                           help='Subsample input frames x_y_z means subsample every x frame at 1st layer, '
+                                'every y frame at 2nd layer etc.')
+        group.add_argument('--target-weights', default="1", type=str,
                            help='Subsample input frames x_y_z means subsample every x frame at 1st layer, '
                                 'every y frame at 2nd layer etc.')
         return parser
@@ -126,7 +140,7 @@ class E2E(ASRInterface, torch.nn.Module):
                            help='Ratio of predicted labels fed back to decoder')
         return parser
 
-    def __init__(self, idim, odim, args):
+    def __init__(self, idim, odim_list, args):
         super(E2E, self).__init__()
         torch.nn.Module.__init__(self)
         self.mtlalpha = args.mtlalpha
@@ -134,17 +148,19 @@ class E2E(ASRInterface, torch.nn.Module):
         self.etype = args.etype
         self.verbose = args.verbose
         # NOTE: for self.build method
-        args.char_list = getattr(args, "char_list", None)
-        self.char_list = args.char_list
+        args.target_dicts = getattr(args, "target_dicts", None)
+        self.target_dicts = args.target_dicts
         self.outdir = args.outdir
         self.space = args.sym_space
         self.blank = args.sym_blank
+
+        self.num_targets = len(odim_list)
         self.reporter = Reporter()
 
         # below means the last number becomes eos/sos ID
         # note that sos/eos IDs are identical
-        self.sos = odim - 1
-        self.eos = odim - 1
+        self.sos_list = [odim - 1 for odim in odim_list]
+        self.eos_list = [odim - 1 for odim in odim_list]
 
         # subsample info
         # +1 means input (+1) and layers outputs (args.elayer)
@@ -159,12 +175,28 @@ class E2E(ASRInterface, torch.nn.Module):
         logging.info('subsample: ' + ' '.join([str(x) for x in subsample]))
         self.subsample = subsample
 
+        #Multi-target tap encoder representations info
+        target_taps = np.ones(self.num_targets, dtype=np.int) * -1
+        tap = args.target_taps.split("_")
+        for j in range(self.num_targets):
+            target_taps[j] = int(tap[j])
+        self.target_taps = target_taps
+
+        #Multi-target weights for each target
+        target_weights = np.ones(self.num_targets, dtype=np.int)
+        weights = args.target_weights.split("_")
+        for j in range(self.num_targets):
+            target_weights[j] = int(weights[j])
+        self.target_weights = target_weights
+
+
+        logging.info(f'Target taps: {str(self.target_taps)}')
         # label smoothing info
         if args.lsm_type and os.path.isfile(args.train_json):
             logging.info("Use label smoothing with " + args.lsm_type)
-            labeldist = label_smoothing_dist(odim, args.lsm_type, transcript=args.train_json)
+            labeldist_list = [label_smoothing_dist(odim, args.lsm_type, transcript=args.train_json) for odim in odim_list]
         else:
-            labeldist = None
+            labeldist_list = [None for _ in odim_list]
 
         # speech translation related
         self.replace_sos = getattr(args, "replace_sos", False)  # use getattr to keep compatibility
@@ -185,11 +217,19 @@ class E2E(ASRInterface, torch.nn.Module):
         # encoder
         self.enc = encoder_for(args, idim, self.subsample)
         # ctc
-        self.ctc = ctc_for(args, odim)
+        self.ctc_list = torch.nn.ModuleList()
+        for odim in odim_list:
+            self.ctc_list.append(ctc_for(args, odim))
+
         # attention
-        self.att = att_for(args)
+        self.att_list = torch.nn.ModuleList()
+        for _ in odim_list:
+            self.att_list.append(att_for(args))
+
         # decoder
-        self.dec = decoder_for(args, odim, self.sos, self.eos, self.att, labeldist)
+        self.dec_list = torch.nn.ModuleList()
+        for i in range(self.num_targets):
+            self.dec_list.append(decoder_for(args, odim_list[i], self.sos_list[i], self.eos_list[i], self.att_list[i], labeldist_list[i], self.target_dicts[i]))
 
         # weight initialization
         self.init_like_chainer()
@@ -255,13 +295,14 @@ class E2E(ASRInterface, torch.nn.Module):
         lecun_normal_init_parameters(self)
         # exceptions
         # embed weight ~ Normal(0, 1)
-        self.dec.embed.weight.data.normal_(0, 1)
-        # forget-bias = 1.0
-        # https://discuss.pytorch.org/t/set-forget-gate-bias-of-lstm/1745
-        for l in six.moves.range(len(self.dec.decoder)):
-            set_forget_bias_to_one(self.dec.decoder[l].bias_ih)
+        for target_idx in range(self.num_targets):
+            self.dec_list[target_idx].embed.weight.data.normal_(0, 1)
+            # forget-bias = 1.0
+            # https://discuss.pytorch.org/t/set-forget-gate-bias-of-lstm/1745
+            for l in six.moves.range(len(self.dec_list[target_idx].decoder)):
+                set_forget_bias_to_one(self.dec_list[target_idx].decoder[l].bias_ih)
 
-    def forward(self, xs_pad, ilens, ys_pad):
+    def forward(self, xs_pad, ilens, ys_pad_list):
         """E2E forward
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -270,6 +311,15 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: loass value
         :rtype: torch.Tensor
         """
+        combined_loss = to_device(self, torch.tensor(0.0))
+        combined_loss_ctc_data = 0
+        combined_loss_att_data = 0
+        combined_acc = 0
+        combined_cer_ctc = 0
+        combined_cer = 0
+        combined_wer = 0
+        combined_loss_data = 0
+
         # 0. Frontend
         if self.frontend is not None:
             hs_pad, hlens, mask = self.frontend(to_torch_tensor(xs_pad), ilens)
@@ -277,111 +327,139 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             hs_pad, hlens = xs_pad, ilens
 
-        # 1. Encoder
-        if self.replace_sos:
-            tgt_lang_ids = ys_pad[:, 0:1]
-            ys_pad = ys_pad[:, 1:]  # remove target language ID in the beggining
-        else:
-            tgt_lang_ids = None
+        enc_hid_vectors, enc_hid_lens, _ = self.enc(hs_pad, hlens)
 
-        hs_pad, hlens, _ = self.enc(hs_pad, hlens)
+        for target_idx in range(self.num_targets):
+            logging.info(f'Working on target {target_idx}')
+            hs_pad = enc_hid_vectors[self.target_taps[target_idx]]
+            hlens = enc_hid_lens[self.target_taps[target_idx]]
+            ys_pad = ys_pad_list[target_idx]
 
-        # 2. CTC loss
-        if self.mtlalpha == 0:
-            self.loss_ctc = None
-        else:
-            self.loss_ctc = self.ctc(hs_pad, hlens, ys_pad)
-
-        # 3. attention loss
-        if self.mtlalpha == 1:
-            self.loss_att, acc = None, None
-        else:
-            self.loss_att, acc, _ = self.dec(hs_pad, hlens, ys_pad, tgt_lang_ids=tgt_lang_ids)
-        self.acc = acc
-
-        # 4. compute cer without beam search
-        if self.mtlalpha == 0 or self.char_list is None:
-            cer_ctc = None
-        else:
-            cers = []
-
-            y_hats = self.ctc.argmax(hs_pad).data
-            for i, y in enumerate(y_hats):
-                y_hat = [x[0] for x in groupby(y)]
-                y_true = ys_pad[i]
-
-                seq_hat = [self.char_list[int(idx)] for idx in y_hat if int(idx) != -1]
-                seq_true = [self.char_list[int(idx)] for idx in y_true if int(idx) != -1]
-                seq_hat_text = "".join(seq_hat).replace(self.space, ' ')
-                seq_hat_text = seq_hat_text.replace(self.blank, '')
-                seq_true_text = "".join(seq_true).replace(self.space, ' ')
-
-                hyp_chars = seq_hat_text.replace(' ', '')
-                ref_chars = seq_true_text.replace(' ', '')
-                if len(ref_chars) > 0:
-                    cers.append(editdistance.eval(hyp_chars, ref_chars) / len(ref_chars))
-
-            cer_ctc = sum(cers) / len(cers) if cers else None
-
-        # 5. compute cer/wer
-        if self.training or not (self.report_cer or self.report_wer):
-            cer, wer = 0.0, 0.0
-            # oracle_cer, oracle_wer = 0.0, 0.0
-        else:
-            if self.recog_args.ctc_weight > 0.0:
-                lpz = self.ctc.log_softmax(hs_pad).data
+            # logging.info(hs_pad)
+            # logging.info(hlens)
+            # 1. Encoder
+            if self.replace_sos:
+                tgt_lang_ids = ys_pad[:, 0:1]
+                ys_pad = ys_pad[:, 1:]  # remove target language ID in the beggining
             else:
-                lpz = None
+                tgt_lang_ids = None
 
-            word_eds, word_ref_lens, char_eds, char_ref_lens = [], [], [], []
-            nbest_hyps = self.dec.recognize_beam_batch(
-                hs_pad, torch.tensor(hlens), lpz,
-                self.recog_args, self.char_list,
-                self.rnnlm,
-                tgt_lang_ids=tgt_lang_ids.squeeze(1).tolist() if self.replace_sos else None)
-            # remove <sos> and <eos>
-            y_hats = [nbest_hyp[0]['yseq'][1:-1] for nbest_hyp in nbest_hyps]
-            for i, y_hat in enumerate(y_hats):
-                y_true = ys_pad[i]
 
-                seq_hat = [self.char_list[int(idx)] for idx in y_hat if int(idx) != -1]
-                seq_true = [self.char_list[int(idx)] for idx in y_true if int(idx) != -1]
-                seq_hat_text = "".join(seq_hat).replace(self.recog_args.space, ' ')
-                seq_hat_text = seq_hat_text.replace(self.recog_args.blank, '')
-                seq_true_text = "".join(seq_true).replace(self.recog_args.space, ' ')
+            # 2. CTC loss
+            if self.mtlalpha == 0:
+                self.loss_ctc = None
+            else:
+                self.loss_ctc = self.ctc_list[target_idx](hs_pad, hlens, ys_pad)
 
-                hyp_words = seq_hat_text.split()
-                ref_words = seq_true_text.split()
-                word_eds.append(editdistance.eval(hyp_words, ref_words))
-                word_ref_lens.append(len(ref_words))
-                hyp_chars = seq_hat_text.replace(' ', '')
-                ref_chars = seq_true_text.replace(' ', '')
-                char_eds.append(editdistance.eval(hyp_chars, ref_chars))
-                char_ref_lens.append(len(ref_chars))
+            # 3. attention loss
+            if self.mtlalpha == 1:
+                self.loss_att, acc = None, None
+            else:
+                self.loss_att, acc, _ = self.dec_list[target_idx](hs_pad, hlens, ys_pad, tgt_lang_ids=tgt_lang_ids)
+            self.acc = acc
 
-            wer = 0.0 if not self.report_wer else float(sum(word_eds)) / sum(word_ref_lens)
-            cer = 0.0 if not self.report_cer else float(sum(char_eds)) / sum(char_ref_lens)
+            # 4. compute cer without beam search
+            if self.mtlalpha == 0 or self.target_dicts is None:
+                cer_ctc = None
+            else:
+                cers = []
 
-        alpha = self.mtlalpha
-        if alpha == 0:
-            self.loss = self.loss_att
-            loss_att_data = float(self.loss_att)
-            loss_ctc_data = None
-        elif alpha == 1:
-            self.loss = self.loss_ctc
-            loss_att_data = None
-            loss_ctc_data = float(self.loss_ctc)
-        else:
-            self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att
-            loss_att_data = float(self.loss_att)
-            loss_ctc_data = float(self.loss_ctc)
+                y_hats = self.ctc_list[target_idx].argmax(hs_pad).data
+                for i, y in enumerate(y_hats):
+                    y_hat = [x[0] for x in groupby(y)]
+                    y_true = ys_pad[i]
 
-        loss_data = float(self.loss)
-        if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
-            self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data)
-        else:
-            logging.warning('loss (=%f) is not correct', loss_data)
-        return self.loss
+                    seq_hat = [self.target_dicts[target_idx][int(idx)] for idx in y_hat if int(idx) != -1]
+                    seq_true = [self.target_dicts[target_idx][int(idx)] for idx in y_true if int(idx) != -1]
+                    seq_hat_text = "".join(seq_hat).replace(self.space, ' ')
+                    seq_hat_text = seq_hat_text.replace(self.blank, '')
+                    seq_true_text = "".join(seq_true).replace(self.space, ' ')
+
+                    hyp_chars = seq_hat_text.replace(' ', '')
+                    ref_chars = seq_true_text.replace(' ', '')
+                    if len(ref_chars) > 0:
+                        cers.append(editdistance.eval(hyp_chars, ref_chars) / len(ref_chars))
+
+                cer_ctc = sum(cers) / len(cers) if cers else None
+
+            # 5. compute cer/wer
+            if self.training or not (self.report_cer or self.report_wer):
+                cer, wer = 0.0, 0.0
+                # oracle_cer, oracle_wer = 0.0, 0.0
+            else:
+                if self.recog_args.ctc_weight > 0.0:
+                    lpz = self.ctc_list[target_idx].log_softmax(hs_pad).data
+                else:
+                    lpz = None
+
+                word_eds, word_ref_lens, char_eds, char_ref_lens = [], [], [], []
+                nbest_hyps = self.dec_list[target_idx].recognize_beam_batch(
+                    hs_pad, torch.tensor(hlens), lpz,
+                    self.recog_args, self.target_dicts[target_idx],
+                    self.rnnlm,
+                    tgt_lang_ids=tgt_lang_ids.squeeze(1).tolist() if self.replace_sos else None)
+                # remove <sos> and <eos>
+                y_hats = [nbest_hyp[0]['yseq'][1:-1] for nbest_hyp in nbest_hyps]
+                for i, y_hat in enumerate(y_hats):
+                    y_true = ys_pad[i]
+
+                    seq_hat = [self.target_dicts[target_idx][int(idx)] for idx in y_hat if int(idx) != -1]
+                    seq_true = [self.target_dicts[target_idx][int(idx)] for idx in y_true if int(idx) != -1]
+                    seq_hat_text = "".join(seq_hat).replace(self.recog_args.space, ' ')
+                    seq_hat_text = seq_hat_text.replace(self.recog_args.blank, '')
+                    seq_true_text = "".join(seq_true).replace(self.recog_args.space, ' ')
+
+                    hyp_words = seq_hat_text.split()
+                    ref_words = seq_true_text.split()
+                    word_eds.append(editdistance.eval(hyp_words, ref_words))
+                    word_ref_lens.append(len(ref_words))
+                    hyp_chars = seq_hat_text.replace(' ', '')
+                    ref_chars = seq_true_text.replace(' ', '')
+                    char_eds.append(editdistance.eval(hyp_chars, ref_chars))
+                    char_ref_lens.append(len(ref_chars))
+
+                wer = 0.0 if not self.report_wer else float(sum(word_eds)) / sum(word_ref_lens)
+                cer = 0.0 if not self.report_cer else float(sum(char_eds)) / sum(char_ref_lens)
+
+            alpha = self.mtlalpha
+            if alpha == 0:
+                self.loss = self.loss_att
+                loss_att_data = float(self.loss_att)
+                loss_ctc_data = None
+            elif alpha == 1:
+                self.loss = self.loss_ctc
+                loss_att_data = None
+                loss_ctc_data = float(self.loss_ctc)
+            else:
+                self.loss = alpha * self.loss_ctc + (1 - alpha) * self.loss_att
+                loss_att_data = float(self.loss_att)
+                loss_ctc_data = float(self.loss_ctc)
+
+            loss_data = float(self.loss)
+            if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
+                self.reporter.report(loss_ctc_data, loss_att_data, acc, cer_ctc, cer, wer, loss_data, target_idx)
+                combined_loss_ctc_data += loss_ctc_data
+                combined_loss_att_data += loss_att_data
+                combined_acc += acc
+                combined_cer_ctc += cer_ctc
+                combined_cer += cer
+                combined_wer += wer
+                combined_loss_data += loss_data
+            else:
+                logging.warning('loss (=%f) is not correct', loss_data)
+
+            logging.info(f'Combined MTL loss for target {target_idx} is {self.loss}')
+            combined_loss += self.target_weights[target_idx] * self.loss
+
+        self.reporter.report(combined_loss_ctc_data/self.num_targets,
+                             loss_att_data/self.num_targets, 
+                             acc/self.num_targets, 
+                             cer_ctc/self.num_targets, 
+                             cer/self.num_targets, 
+                             wer/self.num_targets, 
+                             loss_data/self.num_targets, 
+                             None)
+        return combined_loss
 
     def scorers(self):
         return dict(decoder=self.dec, ctc=CTCPrefixScorer(self.ctc, self.eos))
@@ -497,7 +575,7 @@ class E2E(ASRInterface, torch.nn.Module):
             self.train()
         return enhanced.cpu().numpy(), mask.cpu().numpy(), ilens
 
-    def calculate_all_attentions(self, xs_pad, ilens, ys_pad):
+    def calculate_all_attentions(self, xs_pad, ilens, ys_pad_list, target=-1):
         """E2E attention calculation
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -508,6 +586,7 @@ class E2E(ASRInterface, torch.nn.Module):
             2) other case => attention weights (B, Lmax, Tmax).
         :rtype: float ndarray
         """
+        ys_pad = ys_pad_list[target]
         with torch.no_grad():
             # 0. Frontend
             if self.frontend is not None:
@@ -525,7 +604,9 @@ class E2E(ASRInterface, torch.nn.Module):
             hpad, hlens, _ = self.enc(hs_pad, hlens)
 
             # 2. Decoder
-            att_ws = self.dec.calculate_all_attentions(hpad, hlens, ys_pad, tgt_lang_ids=tgt_lang_ids)
+            hpad = hpad[self.target_taps[target]]
+            hlens = hlens[self.target_taps[target]]
+            att_ws = self.dec_list[target].calculate_all_attentions(hpad, hlens, ys_pad, tgt_lang_ids=tgt_lang_ids)
 
         return att_ws
 

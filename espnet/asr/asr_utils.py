@@ -95,7 +95,7 @@ class PlotAttentionReport(extension.Extension):
     """
 
     def __init__(self, att_vis_fn, data, outdir, converter, transform, device, reverse=False,
-                 ikey="input", iaxis=0, okey="output", oaxis=0):
+                 ikey="input", iaxis=0, okey="output", oaxis=0, target=-1):
         self.att_vis_fn = att_vis_fn
         self.data = copy.deepcopy(data)
         self.outdir = outdir
@@ -109,6 +109,7 @@ class PlotAttentionReport(extension.Extension):
         self.oaxis = oaxis
         if not os.path.exists(self.outdir):
             os.makedirs(self.outdir)
+        self.target = target
 
     def __call__(self, trainer):
         """Plot and save image file of att_ws matrix."""
@@ -120,31 +121,31 @@ class PlotAttentionReport(extension.Extension):
                 for idx, att_w in enumerate(att_ws[i]):
                     filename = "%s/%s.ep.{.updater.epoch}.att%d.png" % (
                         self.outdir, self.data[idx][0], i + 1)
-                    att_w = self.get_attention_weight(idx, att_w)
+                    att_w = self.get_attention_weight(idx, att_w, self.target)
                     np_filename = "%s/%s.ep.{.updater.epoch}.att%d.npy" % (
                         self.outdir, self.data[idx][0], i + 1)
                     np.save(np_filename.format(trainer), att_w)
-                    self._plot_and_save_attention(att_w, filename.format(trainer))
+                    self._plot_and_save_attention(att_w, filename.format(trainer), target=self.target)
             # han
             for idx, att_w in enumerate(att_ws[num_encs]):
                 filename = "%s/%s.ep.{.updater.epoch}.han.png" % (
                     self.outdir, self.data[idx][0])
-                att_w = self.get_attention_weight(idx, att_w)
+                att_w = self.get_attention_weight(idx, att_w, self.target)
                 np_filename = "%s/%s.ep.{.updater.epoch}.han.npy" % (
                     self.outdir, self.data[idx][0])
                 np.save(np_filename.format(trainer), att_w)
-                self._plot_and_save_attention(att_w, filename.format(trainer), han_mode=True)
+                self._plot_and_save_attention(att_w, filename.format(trainer), han_mode=True, target=self.target)
         else:
             for idx, att_w in enumerate(att_ws):
                 filename = "%s/%s.ep.{.updater.epoch}.png" % (
                     self.outdir, self.data[idx][0])
-                att_w = self.get_attention_weight(idx, att_w)
+                att_w = self.get_attention_weight(idx, att_w, self.target)
                 np_filename = "%s/%s.ep.{.updater.epoch}.npy" % (
                     self.outdir, self.data[idx][0])
                 np.save(np_filename.format(trainer), att_w)
-                self._plot_and_save_attention(att_w, filename.format(trainer))
+                self._plot_and_save_attention(att_w, filename.format(trainer), target=self.target)
 
-    def log_attentions(self, logger, step):
+    def log_attentions(self, logger, step, target):
         """Add image files of att_ws matrix to the tensorboard."""
         att_ws = self.get_attention_weights()
         if isinstance(att_ws, list):  # multi-encoder case
@@ -152,21 +153,21 @@ class PlotAttentionReport(extension.Extension):
             # atts
             for i in range(num_encs):
                 for idx, att_w in enumerate(att_ws[i]):
-                    att_w = self.get_attention_weight(idx, att_w)
-                    plot = self.draw_attention_plot(att_w)
+                    att_w = self.get_attention_weight(idx, att_w, target)
+                    plot = self.draw_attention_plot(att_w, target=target)
                     logger.add_figure("%s_att%d" % (self.data[idx][0], i + 1), plot.gcf(), step)
                     plot.clf()
             # han
             for idx, att_w in enumerate(att_ws[num_encs]):
-                att_w = self.get_attention_weight(idx, att_w)
+                att_w = self.get_attention_weight(idx, att_w, target)
                 plot = self.draw_han_plot(att_w)
                 logger.add_figure("%s_han" % (self.data[idx][0]), plot.gcf(), step)
                 plot.clf()
         else:
             for idx, att_w in enumerate(att_ws):
-                att_w = self.get_attention_weight(idx, att_w)
-                plot = self.draw_attention_plot(att_w)
-                logger.add_figure("%s" % (self.data[idx][0]), plot.gcf(), step)
+                att_w = self.get_attention_weight(idx, att_w, target)
+                plot = self.draw_attention_plot(att_w, target=target)
+                logger.add_figure("%s_%s" % (self.data[idx][0], str(target)), plot.gcf(), step)
                 plot.clf()
 
     def get_attention_weights(self):
@@ -181,18 +182,18 @@ class PlotAttentionReport(extension.Extension):
         """
         batch = self.converter([self.transform(self.data)], self.device)
         if isinstance(batch, tuple):
-            att_ws = self.att_vis_fn(*batch)
+            att_ws = self.att_vis_fn(*batch, target=self.target)
         else:
-            att_ws = self.att_vis_fn(**batch)
+            att_ws = self.att_vis_fn(**batch, target=self.target)
         return att_ws
 
-    def get_attention_weight(self, idx, att_w):
+    def get_attention_weight(self, idx, att_w, target):
         """Transform attention matrix with regard to self.reverse."""
         if self.reverse:
             dec_len = int(self.data[idx][1][self.ikey][self.iaxis]['shape'][0])
-            enc_len = int(self.data[idx][1][self.okey][self.oaxis]['shape'][0])
+            enc_len = int(self.data[idx][1][self.okey][target][self.oaxis]['shape'][0])
         else:
-            dec_len = int(self.data[idx][1][self.okey][self.oaxis]['shape'][0])
+            dec_len = int(self.data[idx][1][self.okey][target][self.oaxis]['shape'][0])
             enc_len = int(self.data[idx][1][self.ikey][self.iaxis]['shape'][0])
         if len(att_w.shape) == 3:
             att_w = att_w[:, :dec_len, :enc_len]
@@ -200,7 +201,7 @@ class PlotAttentionReport(extension.Extension):
             att_w = att_w[:dec_len, :enc_len]
         return att_w
 
-    def draw_attention_plot(self, att_w):
+    def draw_attention_plot(self, att_w, target):
         """Plot the att_w matrix.
 
         Returns:
@@ -214,11 +215,11 @@ class PlotAttentionReport(extension.Extension):
                 plt.subplot(1, len(att_w), h)
                 plt.imshow(aw, aspect="auto")
                 plt.xlabel("Encoder Index")
-                plt.ylabel("Decoder Index")
+                plt.ylabel(f'Decoder {target} Index')
         else:
             plt.imshow(att_w, aspect="auto")
             plt.xlabel("Encoder Index")
-            plt.ylabel("Decoder Index")
+            plt.ylabel(f'Decoder {target} Index')
         plt.tight_layout()
         return plt
 
@@ -257,11 +258,11 @@ class PlotAttentionReport(extension.Extension):
         plt.tight_layout()
         return plt
 
-    def _plot_and_save_attention(self, att_w, filename, han_mode=False):
+    def _plot_and_save_attention(self, att_w, filename, han_mode=False, target=-1):
         if han_mode:
             plt = self.draw_han_plot(att_w)
         else:
-            plt = self.draw_attention_plot(att_w)
+            plt = self.draw_attention_plot(att_w, target=target)
         plt.savefig(filename)
         plt.close()
 

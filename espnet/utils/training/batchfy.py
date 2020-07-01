@@ -38,7 +38,7 @@ def batchfy_by_seq(
     while True:
         _, info = sorted_data[start]
         ilen = int(info[ikey][iaxis]['shape'][0])
-        olen = int(info[okey][oaxis]['shape'][0]) if oaxis >= 0 else max(map(lambda x: int(x['shape'][0]), info[okey]))
+        olen = int(sum([info[okey][i][oaxis]['shape'][0] for i in range(len(info[okey]))])/2) if oaxis >= 0 else max(map(lambda x: int(x['shape'][0]), info[okey]))
         factor = max(int(ilen / max_length_in), int(olen / max_length_out))
         # change batchsize depending on the input and output length
         # if ilen = 1000 and max_length_in = 800

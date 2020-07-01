@@ -47,8 +47,8 @@ def get_parser(parser=None, required=True):
                         help='Output directory')
     parser.add_argument('--debugmode', default=1, type=int,
                         help='Debugmode')
-    parser.add_argument('--dict', required=required,
-                        help='Dictionary')
+    parser.add_argument('--dicts', required=required, type=str, nargs='+', action='append',
+                        default=[], help='Dictionary')
     parser.add_argument('--seed', default=1, type=int,
                         help='Random seed')
     parser.add_argument('--debugdir', type=str,
@@ -326,17 +326,21 @@ def main(cmd_args):
     np.random.seed(args.seed)
 
     # load dictionary for debug log
-    if args.dict is not None:
-        with open(args.dict, 'rb') as f:
-            dictionary = f.readlines()
-        char_list = [entry.decode('utf-8').split(' ')[0]
-                     for entry in dictionary]
-        char_list.insert(0, '<blank>')
-        char_list.append('<eos>')
-        args.char_list = char_list
+    args.target_dicts = []
+    if args.dicts is not None:
+        for target_dict in args.dicts[0]:
+            with open(target_dict, 'rb') as f:
+                dictionary = f.readlines()
+            char_list = [entry.decode('utf-8').split(' ')[0]
+                        for entry in dictionary]
+            char_list.insert(0, '<blank>')
+            char_list.append('<eos>')
+            args.target_dicts.append(char_list)
     else:
-        args.char_list = None
+        args.target_dicts = None
 
+    print(args.target_dicts)
+    
     # train
     logging.info('backend = ' + args.backend)
 
