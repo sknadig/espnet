@@ -26,7 +26,7 @@ e.g. $0 data/train data/lang_1char/train_units.txt
 Options:
   --nj <nj>                                        # number of parallel jobs
   --cmd (utils/run.pl|utils/queue.pl <queue opts>) # how to run jobs.
-  --feat <feat-scp>                                # feat.scp or feat1.scp,feat2.scp,...
+  --feat <feat-scp>                                # feat.scp
   --oov <oov-word>                                 # Default: <unk>
   --out <outputfile>                               # If omitted, write in stdout
   --filetype <mat|hdf5|sound.hdf5>                 # Specify the format of feats file
@@ -37,7 +37,7 @@ EOF
 . utils/parse_options.sh
 
 if [ $# != 2 ]; then
-    echo "${help_message}" 1>&2
+    echo $help_message 1>&2
     exit 1;
 fi
 
@@ -50,41 +50,32 @@ trap 'rm -rf ${tmpdir}' EXIT
 
 # 1. Create scp files for inputs
 #   These are not necessary for decoding mode, and make it as an option
-input=
+mkdir -p ${tmpdir}/input
 if [ -n "${feat}" ]; then
-    _feat_scps=$(echo "${feat}" | tr ',' ' ' )
-    read -r -a feat_scps <<< $_feat_scps
-    num_feats=${#feat_scps[@]}
+    cat ${feat} > ${tmpdir}/input/feat.scp
 
-    for (( i=1; i<=num_feats; i++ )); do
-        feat=${feat_scps[$((i-1))]}
-        mkdir -p ${tmpdir}/input_${i}
-        input+="input_${i} "
-        cat ${feat} > ${tmpdir}/input_${i}/feat.scp
+    # Dump in the "legacy" style JSON format
+    if [ -n "${filetype}" ]; then
+        awk -v filetype=${filetype} '{print $1 " " filetype}' ${feat} \
+            > ${tmpdir}/input/filetype.scp
+    fi
 
-        # Dump in the "legacy" style JSON format
-        if [ -n "${filetype}" ]; then
-            awk -v filetype=${filetype} '{print $1 " " filetype}' ${feat} \
-                > ${tmpdir}/input_${i}/filetype.scp
-        fi
-
-        feat_to_shape.sh --cmd "${cmd}" --nj ${nj} \
-            --filetype "${filetype}" \
-            --preprocess-conf "${preprocess_conf}" \
-            --verbose ${verbose} ${feat} ${tmpdir}/input_${i}/shape.scp
-    done
+    feat_to_shape.sh --cmd "${cmd}" --nj ${nj} \
+        --filetype "${filetype}" \
+        --preprocess-conf "${preprocess_conf}" \
+        --verbose ${verbose} ${feat} ${tmpdir}/input/shape.scp
 fi
 
 # 2. Create scp files for outputs
 mkdir -p ${tmpdir}/output
 if [ -n "${bpecode}" ]; then
-    paste -d " " <(awk '{print $1}' ${dir}/text) <(cut -f 2- -d" " ${dir}/text \
+    paste -d " " <(awk '{print $1}' ${dir}/text.${trans_type}) <(cut -f 2- -d" " ${dir}/text.${trans_type} \
         | spm_encode --model=${bpecode} --output_format=piece) \
         > ${tmpdir}/output/token.scp
 elif [ -n "${nlsyms}" ]; then
-    text2token.py -s 1 -n 1 -l ${nlsyms} ${dir}/text --trans_type ${trans_type} > ${tmpdir}/output/token.scp
+    text2token.py -s 1 -n 1 -l ${nlsyms} ${dir}/text.${trans_type} --trans_type ${trans_type} > ${tmpdir}/output/token.scp
 else
-    text2token.py -s 1 -n 1 ${dir}/text --trans_type ${trans_type} > ${tmpdir}/output/token.scp
+    text2token.py -s 1 -n 1 ${dir}/text.${trans_type} --trans_type ${trans_type} > ${tmpdir}/output/token.scp
 fi
 < ${tmpdir}/output/token.scp utils/sym2int.pl --map-oov ${oov} -f 2- ${dic} > ${tmpdir}/output/tokenid.scp
 # +2 comes from CTC blank and EOS
@@ -92,30 +83,30 @@ vocsize=$(tail -n 1 ${dic} | awk '{print $2}')
 odim=$(echo "$vocsize + 2" | bc)
 < ${tmpdir}/output/tokenid.scp awk -v odim=${odim} '{print $1 " " NF-1 "," odim}' > ${tmpdir}/output/shape.scp
 
-cat ${dir}/text > ${tmpdir}/output/text.scp
+cat ${dir}/text.${trans_type} > ${tmpdir}/output/text.${trans_type}.scp
 
 
 # 3. Create scp files for the others
 mkdir -p ${tmpdir}/other
 if [ -n "${lang}" ]; then
-    awk -v lang=${lang} '{print $1 " " lang}' ${dir}/text > ${tmpdir}/other/lang.scp
+    awk -v lang=${lang} '{print $1 " " lang}' ${dir}/text.${trans_type} > ${tmpdir}/other/lang.scp
 fi
 
 if [ -n "${category}" ]; then
-    awk -v category=${category} '{print $1 " " category}' ${dir}/text \
+    awk -v category=${category} '{print $1 " " category}' ${dir}/text.${trans_type} \
         > ${tmpdir}/other/category.scp
 fi
 cat ${dir}/utt2spk > ${tmpdir}/other/utt2spk.scp
 
 # 4. Merge scp files into a JSON file
 opts=""
-for intype in ${input} output other; do
+for intype in input output other; do
     if [ -z "$(find "${tmpdir}/${intype}" -name "*.scp")" ]; then
         continue
     fi
 
     if [ ${intype} != other ]; then
-        opts+="--${intype%_*}-scps "
+        opts+="--${intype}-scps "
     else
         opts+="--scps "
     fi
