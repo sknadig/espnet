@@ -20,7 +20,7 @@ MANUALLY_INSTALLED_LIBRARIES = [
     ("matplotlib", None),
     ("chainer", ("6.0.0")),
     ("chainer_ctc", None),
-    ("warprnnt_pytorch", ("0.1")),
+    #("warprnnt_pytorch", ("0.1")),
 ]
 
 # NOTE: list all torch versions which are compatible with espnet
