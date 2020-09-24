@@ -99,6 +99,14 @@ class E2E(ASRInterface, torch.nn.Module):
                 "vggbgrup",
                 "vgggru",
                 "vggbgru",
+                "sru",
+                "bsru",
+                "srup",
+                "bsrup",
+                "vggsrup",
+                "vggbsrup",
+                "vggsru",
+                "vggbsru",
             ],
             help="Type of encoder network architecture",
         )
@@ -199,7 +207,7 @@ class E2E(ASRInterface, torch.nn.Module):
             "--dtype",
             default="lstm",
             type=str,
-            choices=["lstm", "gru"],
+            choices=["lstm", "gru", "sru"],
             help="Type of decoder network architecture",
         )
         group.add_argument(

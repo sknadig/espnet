@@ -55,6 +55,8 @@ requirements = {
         # VC related
         "fastdtw",
         "pyworld",
+        # Simple Recurrent Unit (SRU)
+        "sru==2.4.2",
     ],
     "setup": ["numpy", "pytest-runner"],
     "test": [

@@ -21,6 +21,7 @@ from espnet.nets.pytorch_backend.nets_utils import pad_list
 from espnet.nets.pytorch_backend.nets_utils import th_accuracy
 from espnet.nets.pytorch_backend.nets_utils import to_device
 from espnet.nets.scorer_interface import ScorerInterface
+from sru import SRUCell
 
 MAX_DECODER_OUTPUT = 5
 CTC_SCORING_RATIO = 1.5
@@ -78,17 +79,21 @@ class Decoder(torch.nn.Module, ScorerInterface):
 
         self.decoder = torch.nn.ModuleList()
         self.dropout_dec = torch.nn.ModuleList()
+
+        if self.dtype == "lstm":
+            rnn = torch.nn.LSTM
+        elif self.dtype == "gru":
+            rnn = torch.nn.GRU
+        elif self.dtype == "sru":
+            rnn = SRUCell
+
         self.decoder += [
-            torch.nn.LSTMCell(dunits + eprojs, dunits)
-            if self.dtype == "lstm"
-            else torch.nn.GRUCell(dunits + eprojs, dunits)
+            rnn(dunits + eprojs, dunits)
         ]
         self.dropout_dec += [torch.nn.Dropout(p=dropout)]
         for _ in six.moves.range(1, self.dlayers):
             self.decoder += [
-                torch.nn.LSTMCell(dunits, dunits)
-                if self.dtype == "lstm"
-                else torch.nn.GRUCell(dunits, dunits)
+                rnn(dunits, dunits)
             ]
             self.dropout_dec += [torch.nn.Dropout(p=dropout)]
             # NOTE: dropout is applied only for the vertical connections

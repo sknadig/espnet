@@ -10,7 +10,7 @@ from torch.nn.utils.rnn import pad_packed_sequence
 from espnet.nets.e2e_asr_common import get_vgg2l_odim
 from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import to_device
-
+from sru import SRUCell
 
 class RNNP(torch.nn.Module):
     """RNN with projection layer module
@@ -33,10 +33,18 @@ class RNNP(torch.nn.Module):
             else:
                 inputdim = hdim
 
-            RNN = torch.nn.LSTM if "lstm" in typ else torch.nn.GRU
-            rnn = RNN(
-                inputdim, cdim, num_layers=1, bidirectional=bidir, batch_first=True
-            )
+            if typ == "lstm":
+                rnn = torch.nn.LSTM(
+                    inputdim, cdim, num_layers=1, bidirectional=bidir, batch_first=True
+                )
+            elif typ == "gru":
+                rnn = torch.nn.GRU(
+                    inputdim, cdim, num_layers=1, bidirectional=bidir, batch_first=True
+                )
+            elif typ == "sru":
+                rnn = SRUCell(
+                    input_size=inputdim, hidden_size=cdim, bidirectional=bidir
+                )
 
             setattr(self, "%s%d" % ("birnn" if bidir else "rnn", i), rnn)
 
@@ -251,7 +259,7 @@ class Encoder(torch.nn.Module):
     ):
         super(Encoder, self).__init__()
         typ = etype.lstrip("vgg").rstrip("p")
-        if typ not in ["lstm", "gru", "blstm", "bgru"]:
+        if typ not in ["lstm", "gru", "sru", "blstm", "bgru", "bsru"]:
             logging.error("Error: need to specify an appropriate encoder architecture")
 
         if etype.startswith("vgg"):
