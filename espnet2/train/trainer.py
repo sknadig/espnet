@@ -342,6 +342,7 @@ class Trainer:
         reporter: SubReporter,
         summary_writer: Optional[SummaryWriter],
         options: TrainerOptions,
+        epoch: int,
     ) -> bool:
         assert check_argument_types()
 
@@ -391,7 +392,7 @@ class Trainer:
 
             with autocast(scaler is not None):
                 with reporter.measure_time("forward_time"):
-                    loss, stats, weight = model(**batch)
+                    loss, stats, weight = model(epoch=0, **batch)
                 stats = {k: v for k, v in stats.items() if v is not None}
                 if ngpu > 1 or distributed:
                     # Apply weighted averaging for loss and stats
@@ -537,7 +538,7 @@ class Trainer:
             if no_forward_run:
                 continue
 
-            _, stats, weight = model(**batch)
+            _, stats, weight = model(epoch=0, **batch)
             if ngpu > 1 or distributed:
                 # Apply weighted averaging for stats.
                 # if distributed, this method can also apply all_reduce()

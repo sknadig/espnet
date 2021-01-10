@@ -5,6 +5,7 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
+from online_triplet_loss.losses import *
 
 import torch
 from typeguard import check_argument_types
@@ -99,6 +100,7 @@ class ESPnetASRModel(AbsESPnetModel):
 
     def forward(
         self,
+        epoch: int,
         speech: torch.Tensor,
         speech_lengths: torch.Tensor,
         text: torch.Tensor,
@@ -132,7 +134,7 @@ class ESPnetASRModel(AbsESPnetModel):
         if self.ctc_weight == 1.0:
             loss_att, acc_att, cer_att, wer_att = None, None, None, None
         else:
-            loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
+            loss_att, acc_att, cer_att, wer_att, triplet_loss = self._calc_att_loss(
                 encoder_out, encoder_out_lens, text, text_lengths
             )
 
@@ -153,12 +155,13 @@ class ESPnetASRModel(AbsESPnetModel):
         elif self.ctc_weight == 1.0:
             loss = loss_ctc
         else:
-            loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
+            loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att + 10 * triplet_loss
 
         stats = dict(
             loss=loss.detach(),
             loss_att=loss_att.detach() if loss_att is not None else None,
             loss_ctc=loss_ctc.detach() if loss_ctc is not None else None,
+            loss_triplet=triplet_loss.detach() if triplet_loss is not None else None, ,
             acc=acc_att,
             cer=cer_att,
             wer=wer_att,
@@ -264,6 +267,13 @@ class ESPnetASRModel(AbsESPnetModel):
             ignore_label=self.ignore_id,
         )
 
+        valid_ys_pad = (ys_out_pad.view(ys_out_pad.size(0)*ys_out_pad.size(1)) != self.sos).nonzero().flatten()
+        # 3. Compute triplet loss
+        triplet_loss = batch_hard_triplet_loss((ys_out_pad.view(ys_out_pad.size(0)*ys_out_pad.size(1)))[valid_ys_pad],\
+        context_vectors.view((context_vectors.size(0)*context_vectors.size(1), context_vectors.size(2)))[valid_ys_pad], \
+        margin=6, device=torch.device('cuda:0'))
+
+
         # Compute cer/wer using attention-decoder
         if self.training or self.error_calculator is None:
             cer_att, wer_att = None, None
@@ -271,7 +281,7 @@ class ESPnetASRModel(AbsESPnetModel):
             ys_hat = decoder_out.argmax(dim=-1)
             cer_att, wer_att = self.error_calculator(ys_hat.cpu(), ys_pad.cpu())
 
-        return loss_att, acc_att, cer_att, wer_att
+        return loss_att, acc_att, cer_att, wer_att, triplet_loss
 
     def _calc_ctc_loss(
         self,
