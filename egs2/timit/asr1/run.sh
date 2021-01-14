@@ -25,6 +25,7 @@ inference_config=conf/decode_asr.yaml
 
 ./asr.sh \
     --token_type "${token_type}" \
+    --asr_tag "triplet_loss_no_sos_from_0" \
     --train_set "${train_set}" \
     --valid_set "${train_dev}" \
     --test_sets "${test_sets}" \
@@ -33,4 +34,5 @@ inference_config=conf/decode_asr.yaml
     --lm_config "${lm_config}" \
     --inference_config "${inference_config}" \
     --local_data_opts "--trans_type ${trans_type}" \
+    --stage 10 \
     --lm_train_text "data/${train_set}/text" "$@"

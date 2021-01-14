@@ -161,7 +161,7 @@ class ESPnetASRModel(AbsESPnetModel):
             loss=loss.detach(),
             loss_att=loss_att.detach() if loss_att is not None else None,
             loss_ctc=loss_ctc.detach() if loss_ctc is not None else None,
-            loss_triplet=triplet_loss.detach() if triplet_loss is not None else None, ,
+            loss_triplet=triplet_loss.detach() if triplet_loss is not None else None,
             acc=acc_att,
             cer=cer_att,
             wer=wer_att,
@@ -255,7 +255,7 @@ class ESPnetASRModel(AbsESPnetModel):
         ys_in_lens = ys_pad_lens + 1
 
         # 1. Forward decoder
-        decoder_out, _ = self.decoder(
+        decoder_out, _, context_vectors = self.decoder(
             encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens
         )
 

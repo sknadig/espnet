@@ -215,6 +215,7 @@ class Trainer:
                     scaler=scaler,
                     summary_writer=summary_writer,
                     options=trainer_options,
+                    epoch=iepoch,
                 )
 
             with reporter.observe("valid") as sub_reporter:
@@ -392,7 +393,7 @@ class Trainer:
 
             with autocast(scaler is not None):
                 with reporter.measure_time("forward_time"):
-                    loss, stats, weight = model(epoch=0, **batch)
+                    loss, stats, weight = model(epoch=epoch,  **batch)
                 stats = {k: v for k, v in stats.items() if v is not None}
                 if ngpu > 1 or distributed:
                     # Apply weighted averaging for loss and stats

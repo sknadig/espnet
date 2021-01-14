@@ -34,7 +34,7 @@ LJSPEECH=downloads
 JSSS=downloads
 JSUT=downloads
 JVS=downloads
-TIMIT=$(realpath ../../../../TIMIT)
+TIMIT="/home/neo/TIMIT/TIMIT/"
 VOXFORGE=downloads
 AMI=
 COMMONVOICE=downloads
@@ -106,7 +106,7 @@ if [[ "$(hostname -d)" == clsp.jhu.edu ]]; then
     JSSS=downloads
     JSUT=downloads
     JVS=downloads
-    TIMIT=
+    TIMIT="/home/neo/TIMIT/TIMIT/"
     VOXFORGE=
     AMI=/export/corpora4/ami/amicorpus
     COMMONVOICE=downloads
