@@ -2,7 +2,7 @@ optim: adadelta
 init: xavier_uniform
 max_epoch: 25
 batch_type: folded
-batch_size: 30
+batch_size: 4
 optim_conf:
     lr: 1.0
     rho: 0.95

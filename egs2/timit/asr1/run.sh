@@ -25,7 +25,7 @@ inference_config=conf/decode_asr.yaml
 
 ./asr.sh \
     --token_type "${token_type}" \
-    --asr_tag "triplet_loss_no_sos_from_0" \
+    --asr_tag "all_triplet_loss_50" \
     --train_set "${train_set}" \
     --valid_set "${train_dev}" \
     --test_sets "${test_sets}" \

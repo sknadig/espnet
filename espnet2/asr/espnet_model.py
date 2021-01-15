@@ -267,11 +267,9 @@ class ESPnetASRModel(AbsESPnetModel):
             ignore_label=self.ignore_id,
         )
 
-        valid_ys_pad = (ys_out_pad.view(ys_out_pad.size(0)*ys_out_pad.size(1)) != self.sos).nonzero().flatten()
+        valid_ys_pad = (ys_out_pad.view(ys_out_pad.size(0)*ys_out_pad.size(1)) != self.sos).nonzero().flatten().cuda()
         # 3. Compute triplet loss
-        triplet_loss = batch_hard_triplet_loss((ys_out_pad.view(ys_out_pad.size(0)*ys_out_pad.size(1)))[valid_ys_pad],\
-        context_vectors.view((context_vectors.size(0)*context_vectors.size(1), context_vectors.size(2)))[valid_ys_pad], \
-        margin=6, device=torch.device('cuda:0'))
+        triplet_loss, _ = batch_all_triplet_loss(ys_out_pad.view(ys_out_pad.size(0)*ys_out_pad.size(1)), context_vectors.view(context_vectors.size(0)*context_vectors.size(1), context_vectors.size(2)), margin=5)
 
 
         # Compute cer/wer using attention-decoder
