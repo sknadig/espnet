@@ -392,6 +392,12 @@ class Decoder(torch.nn.Module, ScorerInterface):
         logging.info("max output length: " + str(maxlen))
         logging.info("min output length: " + str(minlen))
 
+        # initialize logits and att_w history
+        logits_history = [0]
+        att_w_history = [0]
+        att_c_history = [0]
+        decoder_states_history = [0]
+
         # initialize hypothesis
         if rnnlm:
             hyp = {
@@ -401,6 +407,10 @@ class Decoder(torch.nn.Module, ScorerInterface):
                 "z_prev": z_list,
                 "a_prev": a,
                 "rnnlm_prev": None,
+                "logits_history": [logits_history],
+                "att_w_history": [att_w_history],
+                "att_c_history": [att_c_history],
+                "decoder_states_history": [decoder_states_history],
             }
         else:
             hyp = {
@@ -409,6 +419,10 @@ class Decoder(torch.nn.Module, ScorerInterface):
                 "c_prev": c_list,
                 "z_prev": z_list,
                 "a_prev": a,
+                "logits_history": [logits_history],
+                "att_w_history": [att_w_history],
+                "att_c_history": [att_c_history],
+                "decoder_states_history": [decoder_states_history],
             }
         if lpz[0] is not None:
             ctc_prefix_score = [
@@ -533,6 +547,23 @@ class Decoder(torch.nn.Module, ScorerInterface):
                     new_hyp["yseq"] = [0] * (1 + len(hyp["yseq"]))
                     new_hyp["yseq"][: len(hyp["yseq"])] = hyp["yseq"]
                     new_hyp["yseq"][len(hyp["yseq"])] = int(local_best_ids[0, j])
+
+                    new_hyp["logits_history"] = [0] * (1 + len(hyp["yseq"]))
+                    new_hyp["logits_history"][: len(hyp["yseq"])] = hyp["logits_history"]
+                    new_hyp["logits_history"][len(hyp["yseq"])] = logits
+
+                    new_hyp["att_w_history"] = [0] * (1 + len(hyp["yseq"]))
+                    new_hyp["att_w_history"][: len(hyp["yseq"])] = hyp["att_w_history"]
+                    new_hyp["att_w_history"][len(hyp["yseq"])] = att_w
+
+                    new_hyp["att_c_history"] = [0] * (1 + len(hyp["yseq"]))
+                    new_hyp["att_c_history"][: len(hyp["yseq"])] = hyp["att_c_history"]
+                    new_hyp["att_c_history"][len(hyp["yseq"])] = att_c
+
+                    new_hyp["decoder_states_history"] = [0] * (1 + len(hyp["yseq"]))
+                    new_hyp["decoder_states_history"][: len(hyp["yseq"])] = hyp["decoder_states_history"]
+                    new_hyp["decoder_states_history"][len(hyp["yseq"])] = z_list[:]
+
                     if rnnlm:
                         new_hyp["rnnlm_prev"] = rnnlm_state
                     if lpz[0] is not None:
